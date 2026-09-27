@@ -17,13 +17,21 @@
  */
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import { inflateSync } from "node:zlib";
 
 import {
     VARBIT_LEAGUE_TOTAL_TASKS_COMPLETED,
     VARP_LEAGUE_POINTS_CLAIMED,
 } from "../../client/common/vars";
+import { LeagueContentProvider } from "../gamemodes/leagues-v/LeagueContentProvider";
 import { LeagueTaskIndex } from "../gamemodes/leagues-v/LeagueTaskIndex";
 import { LeagueTaskManager } from "../gamemodes/leagues-v/LeagueTaskManager";
+import {
+    CUSTOM_STRUCT_RANGES,
+    CUSTOM_TASK_RANGE,
+    ENUM_IDS,
+    getAllCustomTasks,
+} from "../gamemodes/leagues-v/data/custom";
 import { LEAGUE_TASK_COMPLETION_VARPS } from "../gamemodes/leagues-v/data/leagueTaskVarps";
 import { LEAGUE_TASKS } from "../gamemodes/leagues-v/data/leagueTasks.data";
 import {
@@ -110,11 +118,12 @@ function registeredEasyTaskIds(): Set<number> {
 // Coverage audit
 // ---------------------------------------------------------------------------
 
-// The tier is 273 tasks worth 10 points each; if the cache data ever changes
-// this assertion should be updated deliberately.
+// The tier is 272 cache tasks worth 10 points each; if the cache data ever
+// changes this assertion should be updated deliberately. ("Kill a Man" is the
+// 273rd easy task and lives in the custom task registry instead - see below.)
 {
     const easy = easyTaskIds();
-    assert.equal(easy.length, 273, "there should be 273 easy (10 point) tasks");
+    assert.equal(easy.length, 272, "there should be 272 easy (10 point) cache tasks");
 }
 
 // Regression baseline. Before this pass only 71 of the 273 easy tasks were
@@ -143,7 +152,8 @@ const MUST_REGISTER: ReadonlyArray<[number, string]> = [
     [1554, "Kill a Rat"],
     [1559, "Kill a Chicken with your fists"],
     [1552, "Kill a Spider by kicking it"],
-    [1845, "Kill a Man"],
+    // ("Kill a Man" is not a cache task: it is defined in the custom task
+    // registry and covered by the custom task section below.)
     // Burying (item:bury)
     [97, "Bury Some Bones"],
     // NPC interactions (npc:interact)
@@ -210,6 +220,96 @@ for (const [taskId, name] of MUST_REGISTER) {
         registered.has(taskId),
         `easy task ${taskId} "${name}" must register so a player can complete it`,
     );
+}
+
+// ---------------------------------------------------------------------------
+// Custom tasks: registered ids, indexed trigger, and renderable by the client
+// ---------------------------------------------------------------------------
+
+// "Kill a Man" is not a cache task, so it is defined in CUSTOM_TASKS. It only
+// reaches the player when three layers line up, and the third one used to be
+// missing entirely (the task existed in the data but no client enum listed it,
+// so it never rendered in the task list):
+//  1. the registry assigns a synthetic taskId (1856+, group 58 = varp 4046),
+//  2. the trigger is indexed by npc id (indexCustomTask needs task.trigger),
+//  3. the payload tells the client which league task enum to insert the struct
+//     into (enumGroupId) and ships the struct params it renders.
+{
+    const killAMan = getAllCustomTasks().find((task) => task.name === "Kill a Man");
+    assert.ok(killAMan, `"Kill a Man" must be registered as a custom task`);
+
+    assert.equal(
+        killAMan.taskId,
+        CUSTOM_TASK_RANGE.TASK_ID_BASE,
+        "the first custom task takes the first custom taskId (group 58)",
+    );
+    assert.ok(
+        killAMan.taskId >> 5 === 58,
+        `custom task ids must stay in groups 58-61 (handled by the CS2 script), got group ${killAMan.taskId >> 5}`,
+    );
+    assert.equal(
+        killAMan.structId,
+        CUSTOM_STRUCT_RANGES.TASKS.start,
+        "custom task structs come from the dedicated 90000+ range",
+    );
+    assert.equal(
+        killAMan.enumGroupId,
+        ENUM_IDS.L5_TASKS,
+        "the client can only render tasks it can insert into the league task enum",
+    );
+
+    // The client renders STRUCT_PARAM(name 874 / tier 2044 / taskId 873); custom
+    // structs have no cache struct, so the payload has to carry the values.
+    assert.equal(killAMan.params?.[874], "Kill a Man", "name param");
+    assert.equal(killAMan.params?.[875], "Kill a Man", "description param");
+    assert.equal(killAMan.params?.[873], killAMan.taskId, "taskId param");
+    assert.equal(killAMan.params?.[2044], 1, "tier param (league 5)");
+
+    // Killing any NPC named "Man" completes it.
+    for (const npcId of [1118, 3106, 11057]) {
+        assert.ok(
+            index.getTasksForNpcKill(npcId).some((task) => task.taskId === killAMan.taskId),
+            `killing npc ${npcId} (a Man) should complete "Kill a Man"`,
+        );
+    }
+
+    // Completion writes the varp the client's CS2 script reads back
+    // (league_task_is_completed -> group 58 -> %league_task_completed_58).
+    assert.equal(taskVarpId(killAMan.taskId), 4046, "group 58 maps to varp 4046");
+
+    const harness = createHarness();
+    harness.manager.onNpcKill(PLAYER_ID, 3106, 1);
+    assert.equal(
+        harness.isComplete(killAMan.taskId),
+        true,
+        `"Kill a Man" completes when a Man is killed`,
+    );
+    assert.ok(harness.claimedPoints() >= 10, "and pays its 10 league points");
+    assert.equal(harness.completedTaskCount() >= 1, true);
+
+    // The client can only do any of that if the fields survive the payload it
+    // actually receives (JSON + deflate inside the gamemode content packet).
+    const provider = new LeagueContentProvider();
+    provider.build();
+    const packet = (provider as unknown as { cachedPacket: Uint8Array | null }).cachedPacket;
+    assert.ok(packet, "LeagueContentProvider must build a content packet");
+    const dataLen = (packet[1] << 8) | packet[2];
+    const payload = JSON.parse(
+        inflateSync(Buffer.from(packet.subarray(8, 3 + dataLen))).toString("utf8"),
+    ) as { datasets: Array<{ key: string; rows: Array<Record<string, any>> }> };
+
+    const payloadRow = payload.datasets
+        .find((dataset) => dataset.key === "customTasks")
+        ?.rows.find((row) => row.name === "Kill a Man");
+    assert.ok(payloadRow, `"Kill a Man" must be in the customTasks payload dataset`);
+    assert.equal(
+        payloadRow.enumGroupId,
+        ENUM_IDS.L5_TASKS,
+        "the payload has to announce the enum group or the client never lists the task",
+    );
+    assert.equal(payloadRow.params?.[874], "Kill a Man", "and ship the struct params it renders");
+    assert.equal(payloadRow.params?.[873], killAMan.taskId, "including the taskId param");
+    assert.equal(payloadRow.structId, killAMan.structId, "structId must match the registry");
 }
 
 // Tasks that need content this server does not implement. They must stay

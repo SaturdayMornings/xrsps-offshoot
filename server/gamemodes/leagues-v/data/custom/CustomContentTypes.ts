@@ -112,6 +112,22 @@ export type RegisteredCustomTask = CustomTask & {
     customIndex: number;
     /** Synthetic task ID for the cache-like lookup (high range to avoid conflicts) */
     taskId: number;
+    /**
+     * League task enum that this task is prepended to.
+     *
+     * The client's task list (widget group 657) only renders the members of the
+     * active league's task enum (5728 for league 5), and custom structs have no
+     * cache struct to be discovered from. The payload therefore has to carry the
+     * enum group so GamemodeContentStore/ConfigOps can insert the task into the
+     * enum the client iterates.
+     */
+    enumGroupId?: number;
+    /**
+     * Struct params (TASK_PARAM_IDS -> value) resolved by the client's
+     * STRUCT_PARAM handler. Needed because the client would otherwise read the
+     * (non-existent) cache struct for the 90000+ struct range.
+     */
+    params?: Record<number, number | string>;
 };
 
 // =============================================================================

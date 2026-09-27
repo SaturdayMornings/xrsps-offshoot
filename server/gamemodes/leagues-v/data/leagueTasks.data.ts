@@ -22106,17 +22106,4 @@ export const LEAGUE_TASKS: LeagueTaskRow[] = [
         structId: 2056,
         leagueStructId: 6211,
     },
-    // Custom tasks
-    {
-        taskId: 1845,
-        name: "Kill a Man",
-        description: "Kill a Man",
-        tier: 1,
-        points: 10,
-        category: 2,
-        area: 0,
-        skill: 0,
-        structId: 90001,
-        leagueStructId: 6211,
-    },
 ];

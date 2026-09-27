@@ -25,17 +25,40 @@ function alwaysTable(...entries: NpcDropEntryDefinition[]): NpcDropTableDefiniti
 
 const ITEM_RING_OF_WEALTH_I = 12785;
 const ITEM_GOBLIN_CHAMPION_SCROLL = 6801;
-const GOBLIN_LEVEL_2_NPC_TYPE_IDS = [
-    100, 101, 3028, 3029, 3030, 3031, 3032, 3033, 3034, 3035, 3036, 3051, 3052, 3053, 3054, 5192,
-    5193, 5195, 5196, 5197, 5198, 5199, 5200, 5201, 5202, 5203, 5204, 5205, 5206, 5207, 5208,
+
+// OSRS Wiki: https://oldschool.runescape.wiki/w/Goblin
+// The infobox declares four goblin versions with their own drop tables
+// (`dropversion1..4`), so the id lists below are the infobox `id1..id4` sets
+// verbatim:
+//   version1  Level 2          -> Drop table 1
+//   version2  Level 2 (armed)  -> Drop table 2
+//   version3  Level 5          -> Drop table 2
+//   version4  Level 13         -> Drop table 2
+const GOBLIN_TABLE_1_NPC_TYPE_IDS = [
+    3028, 3029, 3030, 3031, 3032, 3033, 3034, 3035, 3036, 3037, 3038, 3039, 3040, 3041, 3042, 3043,
+    3044, 3051, 3052, 3053, 3054, 5195, 5196, 5197, 5198, 5199, 5200, 5201, 5202, 5203,
 ] as const;
-const GOBLIN_LEVEL_5_NPC_TYPE_IDS = [
-    102, 655, 656, 657, 658, 659, 660, 661, 662, 663, 664, 665, 667, 668, 2484, 3045, 3073, 3074,
-    3075, 3076,
+// Goblin drop table 2 is shared by several separate NPC groups whose wiki pages
+// list the same 128-weight table:
+//   - level 2 goblins carrying a weapon/shield (Goblin `id2`)
+//   - level 5 goblins (Goblin `id3`)
+//   - level 13 goblins (Goblin `id4`)
+//   - Stronghold of Security "Vault of War" goblins (Goblin (Vault of War),
+//     ids 2484-2489 = every version of that page)
+//   - Goblin Village goblins (Goblin (Goblin Village), ids 655-668). The Village
+//     page swaps the generic "Goblin mail" row for a colour-specific one
+//     (Red goblin mail for 655-661, Green goblin mail for 662-668) and adds two
+//     unquantified energy potion rows; this table keeps the generic mail row.
+const GOBLIN_TABLE_2_NPC_TYPE_IDS = [
+    5192, 5193, 5204, 5205, 5206, 5207, 5208, 3045, 3073, 3074, 3075, 3076, 3046, 2484, 2485, 2486,
+    2487, 2488, 2489, 655, 656, 657, 658, 659, 660, 661, 662, 663, 664, 665, 666, 667, 668,
 ] as const;
-const GOBLIN_BONES_ONLY_NPC_TYPE_IDS = [
-    2245, 2246, 2247, 2248, 2249, 2485, 2486, 2487, 2488, 2489, 3046,
-] as const;
+// God Wars Dungeon goblins: https://oldschool.runescape.wiki/w/Goblin_(God_Wars_Dungeon)
+// (infobox `id1..id5` = 2247, 2246, 2249, 2248, 2245; one shared drop table).
+const GWD_GOBLIN_NPC_TYPE_IDS = [2245, 2246, 2247, 2248, 2249] as const;
+// Rock Crabs: https://oldschool.runescape.wiki/w/Rock_Crab
+// (infobox `id1 = 100,102` = Active, `id2 = 101,103` = Hidden).
+const ROCK_CRAB_NPC_TYPE_IDS = [100, 101, 102, 103] as const;
 
 // Imp NPC type IDs (level 2)
 const IMP_NPC_TYPE_IDS = [5007, 3134] as const;
@@ -92,8 +115,10 @@ export const MANUAL_NPC_DROP_OVERRIDES: ManualNpcDropOverride[] = [
         npcTypeIds: [...SCORPION_NPC_TYPE_IDS],
         table: alwaysTable(drop("Bones", 1, "Always")),
     },
+    // Goblin drop table 1 — plain level 2 goblins.
+    // Source: https://oldschool.runescape.wiki/w/Goblin#Drop_table_1
     {
-        npcTypeIds: [...GOBLIN_LEVEL_2_NPC_TYPE_IDS],
+        npcTypeIds: [...GOBLIN_TABLE_1_NPC_TYPE_IDS],
         table: {
             always: [drop("Bones", 1, "Always")],
             pools: [
@@ -148,8 +173,11 @@ export const MANUAL_NPC_DROP_OVERRIDES: ManualNpcDropOverride[] = [
             ],
         },
     },
+    // Goblin drop table 2 — armed level 2, level 5 and level 13 goblins, plus the
+    // Vault of War (Stronghold of Security) and Goblin Village goblins.
+    // Source: https://oldschool.runescape.wiki/w/Goblin#Drop_table_2
     {
-        npcTypeIds: [...GOBLIN_LEVEL_5_NPC_TYPE_IDS],
+        npcTypeIds: [...GOBLIN_TABLE_2_NPC_TYPE_IDS],
         table: {
             always: [drop("Bones", 1, "Always")],
             pools: [
@@ -178,6 +206,19 @@ export const MANUAL_NPC_DROP_OVERRIDES: ManualNpcDropOverride[] = [
                         drop("Grapes", 1, "1/128"),
                         drop("Red cape", 1, "1/128"),
                         drop("Tin ore", 1, "1/128"),
+                        // {{HerbDropLines|2/128}} — the wiki's shared herb sub-table
+                        // (2/128 of the 128-weight table).
+                        drop("Grimy guam leaf", 1, "1/256"),
+                        drop("Grimy marrentill", 1, "1/341.3"),
+                        drop("Grimy tarromin", 1, "1/455.1"),
+                        drop("Grimy harralander", 1, "1/585.1"),
+                        drop("Grimy ranarr weed", 1, "1/744.7"),
+                        drop("Grimy irit leaf", 1, "1/1024"),
+                        drop("Grimy avantoe", 1, "1/1365.3"),
+                        drop("Grimy kwuarm", 1, "1/1638.4"),
+                        drop("Grimy cadantine", 1, "1/2048"),
+                        drop("Grimy lantadyme", 1, "1/2730.7"),
+                        drop("Grimy dwarf weed", 1, "1/2730.7"),
                     ],
                 },
                 {
@@ -207,9 +248,157 @@ export const MANUAL_NPC_DROP_OVERRIDES: ManualNpcDropOverride[] = [
             ],
         },
     },
+    // Rows deliberately not modelled in the goblin tables above:
+    //   - Energy potion(1)-(4): the Goblin page lists them as Common/Unknown (and
+    //     flags both tables {{obsolete}} for that change), so there is no numeric
+    //     rarity to copy yet.
+    //   - Coins 10 (2/128): free-to-play worlds only; this server has no
+    //     members/free-to-play split.
+    //   - Goblin skull: listed as "Always", but only during Rag and Bone Man I;
+    //     the drop condition model has no quest-stage predicate.
+    // God Wars Dungeon goblins (levels 12, 13, 15 and 17 share one table).
+    // Source: https://oldschool.runescape.wiki/w/Goblin_(God_Wars_Dungeon)
     {
-        npcTypeIds: [...GOBLIN_BONES_ONLY_NPC_TYPE_IDS],
-        table: alwaysTable(drop("Bones", 1, "Always")),
+        npcTypeIds: [...GWD_GOBLIN_NPC_TYPE_IDS],
+        table: {
+            always: [drop("Bones", 1, "Always")],
+            pools: [
+                {
+                    kind: "weighted",
+                    category: "main",
+                    entries: [
+                        drop("Bronze axe", 1, "3/128"),
+                        drop("Bronze scimitar", 1, "1/128"),
+                        drop("Bronze spear", 1, "9/128"),
+                        drop("Bronze arrow", 7, "3/128"),
+                        drop("Mind rune", 2, "3/128"),
+                        drop("Earth rune", 4, "3/128"),
+                        drop("Body rune", 2, "3/128"),
+                        drop("Bronze javelin", 5, "2/128"),
+                        drop("Chaos rune", 1, "1/128"),
+                        drop("Nature rune", 1, "1/128"),
+                        // {{HerbDropLines|2/128}}
+                        drop("Grimy guam leaf", 1, "1/256"),
+                        drop("Grimy marrentill", 1, "1/341.3"),
+                        drop("Grimy tarromin", 1, "1/455.1"),
+                        drop("Grimy harralander", 1, "1/585.1"),
+                        drop("Grimy ranarr weed", 1, "1/744.7"),
+                        drop("Grimy irit leaf", 1, "1/1024"),
+                        drop("Grimy avantoe", 1, "1/1365.3"),
+                        drop("Grimy kwuarm", 1, "1/1638.4"),
+                        drop("Grimy cadantine", 1, "1/2048"),
+                        drop("Grimy lantadyme", 1, "1/2730.7"),
+                        drop("Grimy dwarf weed", 1, "1/2730.7"),
+                        drop("Coins", 1, "34/128"),
+                        drop("Coins", 3, "13/128"),
+                        drop("Coins", 5, "8/128"),
+                        drop("Coins", 16, "7/128"),
+                        drop("Coins", 24, "3/128"),
+                        // Wiki: the hammer rate rises to 1/2 when no hammer is carried.
+                        drop("Hammer", 1, "9/128"),
+                        drop("Goblin book", 1, "2/128"),
+                        drop("Goblin mail", 1, "10/128"),
+                        drop("Grapes", 1, "1/128"),
+                        drop("Red cape", 1, "1/128"),
+                        drop("Tin ore", 1, "1/128"),
+                    ],
+                },
+                {
+                    kind: "independent",
+                    category: "tertiary",
+                    entries: [
+                        // Wiki: looting bags only drop in the Wilderness God Wars Dungeon.
+                        {
+                            itemName: "Looting bag",
+                            quantity: 1,
+                            rarity: "1/11",
+                            altRarity: "1/10",
+                            condition: { wildernessOnly: true },
+                        },
+                        drop("Ensouled goblin head", 1, "1/30"),
+                        drop("Ecumenical key", 1, "1/60"),
+                        { itemName: "Clue scroll (beginner)", quantity: 1, rarity: "1/80" },
+                        {
+                            itemName: "Clue scroll (easy)",
+                            quantity: 1,
+                            rarity: "1/128",
+                            altRarity: "1/64",
+                            altCondition: {
+                                wildernessOnly: true,
+                                requiredAnyEquippedItemIds: [ITEM_RING_OF_WEALTH_I],
+                            },
+                        },
+                        {
+                            itemId: ITEM_GOBLIN_CHAMPION_SCROLL,
+                            quantity: 1,
+                            rarity: "1/5000",
+                            condition: { minimumQuestPoints: 32 },
+                        },
+                    ],
+                },
+            ],
+        },
+    },
+    // Rock Crabs: all four ids share one table and rock crabs drop no bones.
+    // The wiki's two "Always" rows (Clue scroll (elite) / Reward casket (elite))
+    // only apply while on an elite cryptic clue step ("Killing a rock crab"),
+    // which the drop condition model cannot express, so they are omitted.
+    // The wiki lists "Nothing" as 19/128; the resolver derives the remainder
+    // (≈15.2%) from the entry probabilities, because the gem-table rows below are
+    // modelled at their absolute per-kill rates while the wiki's 19/128 also
+    // covers the gem table's own blank rolls.
+    // Source: https://oldschool.runescape.wiki/w/Rock_Crab
+    {
+        npcTypeIds: [...ROCK_CRAB_NPC_TYPE_IDS],
+        table: {
+            pools: [
+                {
+                    kind: "weighted",
+                    category: "main",
+                    entries: [
+                        drop("Bronze pickaxe", 1, "6/128"),
+                        drop("Iron pickaxe", 1, "5/128"),
+                        drop("Seaweed", 1, "4/128"),
+                        drop("Seaweed", 2, "4/128"),
+                        drop("Seaweed", 5, "2/128"),
+                        drop("Edible seaweed", 2, "2/128"),
+                        drop("Tin ore", 3, "4/128"),
+                        drop("Iron ore", 1, "2/128"),
+                        drop("Coal", 2, "2/128"),
+                        drop("Copper ore", 3, "2/128"),
+                        drop("Oyster", 2, "12/128"),
+                        drop("Oyster", 1, "9/128"),
+                        drop("Empty oyster", 1, "3/128"),
+                        drop("Empty oyster", 3, "1/128"),
+                        drop("Oyster pearl", 1, "1/128"),
+                        drop("Coins", 4, "29/128"),
+                        drop("Coins", 8, "6/128"),
+                        drop("Coins", 36, "8/128"),
+                        drop("Fishing bait", 10, "2/128"),
+                        drop("Opal bolt tips", 5, "2/128"),
+                        drop("Spinach roll", 1, "1/128"),
+                        drop("Casket", 1, "1/128"),
+                        // {{GemDropTable|1/128|naturetalisman=yes}} — per-kill rates.
+                        drop("Uncut sapphire", 1, "1/512"),
+                        drop("Uncut emerald", 1, "1/1024"),
+                        drop("Uncut ruby", 1, "1/2048"),
+                        drop("Nature talisman", 1, "1/5461.33"),
+                        drop("Uncut diamond", 1, "1/8192"),
+                        drop("Rune javelin", 5, "1/16384"),
+                        drop("Loop half of key", 1, "1/16384"),
+                        drop("Tooth half of key", 1, "1/16384"),
+                        drop("Rune spear", 1, "1/262144"),
+                        drop("Shield left half", 1, "1/524288"),
+                        drop("Dragon spear", 1, "1/699050.67"),
+                    ],
+                },
+                {
+                    kind: "independent",
+                    category: "tertiary",
+                    entries: [{ itemName: "Clue scroll (easy)", quantity: 1, rarity: "1/128" }],
+                },
+            ],
+        },
     },
     {
         npcTypeIds: [178],
@@ -281,10 +470,6 @@ export const MANUAL_NPC_DROP_OVERRIDES: ManualNpcDropOverride[] = [
     {
         npcTypeIds: [3017],
         table: alwaysTable(drop("Big bones", 1, "Always")),
-    },
-    {
-        npcTypeIds: [3029],
-        table: alwaysTable(drop("Bones", 1, "Always")),
     },
     {
         npcTypeIds: [3106],

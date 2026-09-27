@@ -24,6 +24,8 @@
     "build-npc-aggression": "tsx scripts/build-npc-aggression.ts",
     "build-shops": "tsx scripts/build-shops.ts",
     "ensure-cache": "tsx scripts/ensure-cache.ts --server",
+    "find-item": "tsx scripts/find-item.ts",
+    "wiki-drops": "tsx scripts/wiki-drops.ts",
     "test": "tsx tests/authentication.test.ts && tsx tests/friends-chat.test.ts && tsx tests/npc-drop-tables.test.ts && tsx tests/league-level-tasks.test.ts && tsx tests/league-bury-cook-tasks.test.ts && tsx tests/league-easy-tier-tasks.test.ts"
   },
   "devDependencies": {

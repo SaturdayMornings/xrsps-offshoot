@@ -17,6 +17,7 @@ import {
     CUSTOM_STRUCT_RANGES,
     CUSTOM_TASK_RANGE,
     ENUM_IDS,
+    type CustomTask,
     type RegisteredCustomChallenge,
     type RegisteredCustomTask,
     TASK_PARAM_IDS,
@@ -78,6 +79,10 @@ const SYNTHETIC_TASK_ID_BASE = 1856;
             structId: nextTaskStructId,
             customIndex: taskIndex,
             taskId: SYNTHETIC_TASK_ID_BASE + taskIndex,
+            // Announce the enum the client has to insert this task into, plus the
+            // struct params it has to resolve for the synthetic struct id.
+            enumGroupId: task.leagueType === 5 ? ENUM_IDS.L5_TASKS : undefined,
+            params: buildTaskStructParams(task, SYNTHETIC_TASK_ID_BASE + taskIndex),
         };
 
         registeredTasks.push(registered);
@@ -167,30 +172,35 @@ export function getStructParam(structId: number, paramId: number): number | stri
     return undefined;
 }
 
+/**
+ * Build the struct params for a custom task.
+ *
+ * Custom task structs live in the 90000+ range and therefore have no cache
+ * struct, so the client cannot read name/description/tier from the cache. These
+ * params are shipped in the gamemode payload and served by
+ * GamemodeContentStore.getCustomStructParam() -> ConfigOps STRUCT_PARAM.
+ */
+function buildTaskStructParams(
+    task: CustomTask,
+    taskId: number,
+): Record<number, number | string> {
+    return {
+        [TASK_PARAM_IDS.TASK_ID]: taskId,
+        [TASK_PARAM_IDS.NAME]: task.name,
+        [TASK_PARAM_IDS.DESCRIPTION]: task.description,
+        [TASK_PARAM_IDS.CATEGORY]: task.category ?? 0,
+        [TASK_PARAM_IDS.AREA]: task.area ?? 0,
+        [TASK_PARAM_IDS.SKILL]: task.skill ?? 0,
+        [TASK_PARAM_IDS.TIER_L5]: task.tier,
+        [TASK_PARAM_IDS.TIER_L4]: task.tier,
+    };
+}
+
 function getTaskStructParam(
     task: RegisteredCustomTask,
     paramId: number,
 ): number | string | undefined {
-    const pid = paramId | 0;
-    switch (pid) {
-        case TASK_PARAM_IDS.TASK_ID:
-            return task.taskId;
-        case TASK_PARAM_IDS.NAME:
-            return task.name;
-        case TASK_PARAM_IDS.DESCRIPTION:
-            return task.description;
-        case TASK_PARAM_IDS.CATEGORY:
-            return task.category ?? 0;
-        case TASK_PARAM_IDS.AREA:
-            return task.area ?? 0;
-        case TASK_PARAM_IDS.SKILL:
-            return task.skill ?? 0;
-        case TASK_PARAM_IDS.TIER_L5:
-        case TASK_PARAM_IDS.TIER_L4:
-            return task.tier;
-        default:
-            return undefined;
-    }
+    return task.params?.[paramId | 0];
 }
 
 function getChallengeStructParam(
