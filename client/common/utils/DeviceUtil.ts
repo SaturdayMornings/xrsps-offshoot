@@ -254,14 +254,74 @@ export function getSafeAreaBounds(canvasWidth: number, canvasHeight: number): Sa
     return { minX, minY, maxX, maxY };
 }
 
-export const isWebGL2Supported = (() => {
+/**
+ * Probe the browser for a usable WebGL2 context.
+ *
+ * The probe context is released again with WEBGL_lose_context before returning:
+ * browsers cap the number of live WebGL contexts per page, and a leaked probe
+ * context pushes the real renderer closer to that cap (Chrome then starts
+ * dropping contexts, which looks like the client silently stopped drawing).
+ */
+export function probeWebGL2Support(): boolean {
     if (typeof document === "undefined") return false;
+
+    let context: WebGL2RenderingContext | null = null;
     try {
-        return !!document.createElement("canvas").getContext("webgl2");
+        context = document.createElement("canvas").getContext("webgl2");
     } catch {
         return false;
     }
-})();
+    if (!context) return false;
+
+    try {
+        context.getExtension("WEBGL_lose_context")?.loseContext();
+    } catch {}
+
+    return true;
+}
+
+/**
+ * Cached WebGL2 support flag shared by the render path and the boot sequence.
+ *
+ * This is a live binding: refreshWebGL2Support() re-probes and importers observe
+ * the updated value, so a browser that only became WebGL2-capable after the
+ * bundle was evaluated (GPU process still starting, driver reset) recovers
+ * without a full page reload.
+ */
+export let isWebGL2Supported = probeWebGL2Support();
+
+/**
+ * Re-probe WebGL2 support and update the shared flag.
+ *
+ * Support only ever moves false -> true, so a transient probe failure while the
+ * client is already rendering cannot downgrade the flag the render path reads.
+ */
+export function refreshWebGL2Support(): boolean {
+    if (!isWebGL2Supported) {
+        isWebGL2Supported = probeWebGL2Support();
+    }
+    return isWebGL2Supported;
+}
+
+/**
+ * Short, human-readable reason WebGL2 is unavailable. Shown verbatim on the boot
+ * error screen so a black page is never the only feedback.
+ */
+export function describeWebGL2Support(): string {
+    if (typeof document === "undefined") {
+        return "This page is not running inside a browser document.";
+    }
+    if (probeWebGL2Support()) {
+        return "WebGL2 is available now - retry to continue.";
+    }
+    let webgl1 = false;
+    try {
+        webgl1 = !!document.createElement("canvas").getContext("webgl");
+    } catch {}
+    return webgl1
+        ? "The browser exposes WebGL1 but not WebGL2, which the client requires."
+        : "The browser exposes no WebGL context at all.";
+}
 
 export function getCanvasCssSize(canvas: HTMLCanvasElement): { width: number; height: number } {
     const clientWidth = canvas.clientWidth || canvas.offsetWidth;

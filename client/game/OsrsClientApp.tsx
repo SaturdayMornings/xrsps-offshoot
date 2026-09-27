@@ -18,6 +18,7 @@ import {
 } from "../common/utils/CacheManifest";
 import {
     checkMobile,
+    describeWebGL2Support,
     isIos,
     isStandaloneDisplayMode,
     isTouchDevice,
@@ -31,6 +32,7 @@ import {
 import { fetchCacheList, loadCacheFilesAuto } from "./Caches";
 import { GameContainer } from "./GameContainer";
 import { getAvailableRenderers } from "./GameRenderers";
+import { detectAvailableRenderers } from "./RendererDetection";
 import { OsrsClient } from "./OsrsClient";
 import {
     getClientPreference,
@@ -98,6 +100,7 @@ if (typeof module !== "undefined" && module.hot) {
 function OsrsClientApp() {
     const [errorMessage, setErrorMessage] = useState<string>();
     const [osrsClient, setOsrsClient] = useState<OsrsClient>();
+    const [bootAttempt, setBootAttempt] = useState(0);
     const [storageWarnings, setStorageWarnings] = useState<string[]>([]);
     const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<BeforeInstallPromptEvent>();
     const [showInstallPrompt, setShowInstallPrompt] = useState(false);
@@ -186,6 +189,11 @@ function OsrsClientApp() {
         setClientPreference("iosInstallHintDismissed", true);
     }, []);
 
+    const retryBoot = useCallback(() => {
+        setErrorMessage(undefined);
+        setBootAttempt((attempt) => attempt + 1);
+    }, []);
+
     // Two workers build maps in parallel — halves total grid load time.
     // Progressive rendering shows each map as it arrives, no main-thread freeze.
     const workerCount = useMemo(() => {
@@ -207,6 +215,16 @@ function OsrsClientApp() {
         let clientToDispose: OsrsClient | undefined;
         let rendererCheckFrame: number | undefined;
         let rendererCheckTimer: ReturnType<typeof setTimeout> | undefined;
+
+        // A retry after a failed boot must not keep showing the previous error.
+        setErrorMessage(undefined);
+
+        // bootAttempt is read here on purpose: it is a state counter, so choosing
+        // Retry re-runs this whole boot sequence (renderer detection, cache
+        // validation, client creation) instead of forcing a page reload.
+        if (bootAttempt > 0) {
+            console.log(`[OsrsClientApp] Boot attempt ${bootAttempt + 1}`);
+        }
 
         const load = async () => {
             const cacheList = await cachesPromise;
@@ -284,9 +302,18 @@ function OsrsClientApp() {
 
             // ========== Create OsrsClient BEFORE cache download ==========
             // This allows the LoginRenderer to display download progress via the state machine
-            const availableRenderers = getAvailableRenderers();
+            // Detection retries briefly: WebGL2 can be missing for the first moments of a
+            // cold browser start, and that must not be reported as a hard failure.
+            const availableRenderers = await detectAvailableRenderers(getAvailableRenderers);
+            if (disposed) return;
             if (availableRenderers.length === 0) {
-                setErrorMessage("No renderers available");
+                setErrorMessage(
+                    "No renderers available\n\n" +
+                        `${describeWebGL2Support()}\n\n` +
+                        'The client needs WebGL2. Enable "Use graphics acceleration when available" ' +
+                        "in your browser settings, update your graphics driver, then choose Retry. " +
+                        "Check chrome://gpu (or about:support) if the problem persists.",
+                );
                 return;
             }
             const rendererType = availableRenderers[0];
@@ -422,12 +449,42 @@ function OsrsClientApp() {
             clientToDispose?.dispose();
             if (window.osrsClient === clientToDispose) window.osrsClient = undefined;
         };
-    }, [addStorageWarning, loginUnsubscribers, workerPool]);
+    }, [addStorageWarning, bootAttempt, loginUnsubscribers, workerPool]);
 
     let content: JSX.Element | undefined;
 
     if (errorMessage) {
-        content = <div className="center-container max-height content-text">{errorMessage}</div>;
+        content = (
+            <div
+                className="center-container max-height content-text"
+                style={{
+                    flexDirection: "column",
+                    gap: 16,
+                    padding: "0 24px",
+                    textAlign: "center",
+                    whiteSpace: "pre-line",
+                }}
+            >
+                <span>{errorMessage}</span>
+                <button
+                    type="button"
+                    onClick={retryBoot}
+                    style={{
+                        background: "#3a3a5a",
+                        border: "1px solid #8a8ab0",
+                        borderRadius: 4,
+                        color: "#f8f9ff",
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        fontSize: "1rem",
+                        fontWeight: "bold",
+                        padding: "10px 28px",
+                    }}
+                >
+                    Retry
+                </button>
+            </div>
+        );
     } else if (osrsClient) {
         // Show GameContainer - LoginRenderer handles all loading states (DOWNLOADING and LOADING)
         content = <GameContainer osrsClient={osrsClient} />;
