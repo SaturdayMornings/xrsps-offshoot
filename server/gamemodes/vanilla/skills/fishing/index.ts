@@ -251,6 +251,13 @@ function executeFishAction(ctx: ScriptActionHandlerContext): ActionExecutionResu
                     : `You catch some ${fishName}.`,
             ),
         );
+
+        // Leagues gathering tasks ("Catch a Shrimp", "Catch 100 Sharks", ...).
+        services.system.eventBus?.emit("item:obtain", {
+            playerId: player.id,
+            itemId: rewardItemId,
+            count: quantity,
+        });
         if (hasEchoHarpoonPerk) {
             const capitalizedFishName = fishName.charAt(0).toUpperCase() + fishName.slice(1);
             effects.push(

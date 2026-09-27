@@ -39,6 +39,7 @@ export interface ParsedChallenge {
 export class LeagueTaskIndex {
     // Tier 1 indexes - O(1) lookup by ID
     private npcIdToTasks = new Map<number, ParsedTask[]>();
+    private npcIdToInteractTasks = new Map<number, ParsedTask[]>();
     private itemEquipToTasks = new Map<number, ParsedTask[]>();
     private itemObtainToTasks = new Map<number, ParsedTask[]>();
     private itemCraftToTasks = new Map<number, ParsedTask[]>();
@@ -57,6 +58,9 @@ export class LeagueTaskIndex {
     // Level milestone tasks - re-evaluated on level-up / login (small list)
     private levelReachTasks: ParsedTask[] = [];
 
+    // Quest completion tasks - re-evaluated on quest completion / login (small list)
+    private questCompleteTasks: ParsedTask[] = [];
+
     // Stats for debugging
     private parsedCount = 0;
     private unparsedCount = 0;
@@ -70,9 +74,13 @@ export class LeagueTaskIndex {
     static build(
         npcTypeLoader: { load: (id: number) => { name?: string } | undefined } | undefined,
         objTypeLoader: { load: (id: number) => { name?: string } | undefined } | undefined,
+        options: { getQuestKeyByName?: (name: string) => string | undefined } = {},
     ): LeagueTaskIndex {
         const index = new LeagueTaskIndex();
-        const loaders = buildNameLookups(npcTypeLoader, objTypeLoader);
+        const loaders: TriggerParserLoaders = {
+            ...buildNameLookups(npcTypeLoader, objTypeLoader),
+            getQuestKeyByName: options.getQuestKeyByName,
+        };
 
         // Index cache-defined tasks
         for (const task of LEAGUE_TASKS) {
@@ -127,6 +135,12 @@ export class LeagueTaskIndex {
                 }
                 break;
 
+            case TriggerType.NpcInteract:
+                for (const npcId of trigger.npcIds) {
+                    this.addToIndex(this.npcIdToInteractTasks, npcId, parsed);
+                }
+                break;
+
             case TriggerType.ItemEquip:
                 for (const itemId of trigger.itemIds) {
                     this.addToIndex(this.itemEquipToTasks, itemId, parsed);
@@ -153,6 +167,10 @@ export class LeagueTaskIndex {
 
             case TriggerType.LevelReach:
                 this.levelReachTasks.push(parsed);
+                break;
+
+            case TriggerType.QuestComplete:
+                this.questCompleteTasks.push(parsed);
                 break;
 
             // Tier 2+ triggers - not indexed yet
@@ -202,6 +220,12 @@ export class LeagueTaskIndex {
                 }
                 break;
 
+            case TriggerType.NpcInteract:
+                for (const npcId of trigger.npcIds) {
+                    this.addToIndex(this.npcIdToInteractTasks, npcId, parsed);
+                }
+                break;
+
             case TriggerType.ItemEquip:
                 for (const itemId of trigger.itemIds) {
                     this.addToIndex(this.itemEquipToTasks, itemId, parsed);
@@ -228,6 +252,10 @@ export class LeagueTaskIndex {
 
             case TriggerType.LevelReach:
                 this.levelReachTasks.push(parsed);
+                break;
+
+            case TriggerType.QuestComplete:
+                this.questCompleteTasks.push(parsed);
                 break;
 
             default:
@@ -363,6 +391,14 @@ export class LeagueTaskIndex {
     }
 
     /**
+     * Get tasks triggered by interacting with an NPC ("Talk to Hans",
+     * "Pet a Stray Dog in Varrock", ...).
+     */
+    getTasksForNpcInteract(npcId: number): ParsedTask[] {
+        return this.npcIdToInteractTasks.get(npcId) ?? [];
+    }
+
+    /**
      * Get challenges triggered by equipping an item.
      */
     getChallengesForItemEquip(itemId: number): ParsedChallenge[] {
@@ -407,6 +443,15 @@ export class LeagueTaskIndex {
         return this.levelReachTasks;
     }
 
+    /**
+     * Get tasks that complete once the player finishes a quest.
+     * Quest tasks are stateful (quest completion is varp-backed), so they are
+     * evaluated as one small list on quest completion and on login.
+     */
+    getQuestCompleteTasks(): readonly ParsedTask[] {
+        return this.questCompleteTasks;
+    }
+
     // === Stats ===
 
     getStats(): {
@@ -417,11 +462,13 @@ export class LeagueTaskIndex {
         challenges: number;
         indexSizes: {
             npcKill: number;
+            npcInteract: number;
             itemEquip: number;
             itemObtain: number;
             itemCraft: number;
             itemBury: number;
             levelReach: number;
+            questComplete: number;
         };
         challengeIndexSizes: {
             npcKill: number;
@@ -441,11 +488,13 @@ export class LeagueTaskIndex {
             challenges: this.challengeCount,
             indexSizes: {
                 npcKill: this.npcIdToTasks.size,
+                npcInteract: this.npcIdToInteractTasks.size,
                 itemEquip: this.itemEquipToTasks.size,
                 itemObtain: this.itemObtainToTasks.size,
                 itemCraft: this.itemCraftToTasks.size,
                 itemBury: this.itemBuryToTasks.size,
                 levelReach: this.levelReachTasks.length,
+                questComplete: this.questCompleteTasks.length,
             },
             challengeIndexSizes: {
                 npcKill: this.npcIdToChallenges.size,

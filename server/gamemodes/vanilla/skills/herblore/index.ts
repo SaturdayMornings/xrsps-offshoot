@@ -121,6 +121,14 @@ export function register(registry: IScriptRegistry, services: ScriptServices): v
                 if (addSkillXp && h.xp > 0) {
                     addSkillXp(player, SkillId.Herblore, h.xp);
                 }
+                // Leagues tasks name the input ("Clean a Grimy Guam",
+                // "Clean 25 Grimy Guam Leafs"), so the craft event carries the
+                // grimy herb that was cleaned.
+                services.system.eventBus?.emit("item:craft", {
+                    playerId: player.id,
+                    itemId: h.grimy,
+                    count: 1,
+                });
                 services.messaging.sendGameMessage(player, "You clean the herb.");
                 snapshotInventory(player);
             },
@@ -173,6 +181,12 @@ export function register(registry: IScriptRegistry, services: ScriptServices): v
             if (addSkillXp && f.xp > 0) {
                 addSkillXp(player, SkillId.Herblore, f.xp);
             }
+            // Leagues "Make an Attack Potion" / "Create an Antipoison" tasks.
+            services.system.eventBus?.emit("item:craft", {
+                playerId: player.id,
+                itemId: f.product3,
+                count: 1,
+            });
             services.messaging.sendGameMessage(
                 player,
                 "You combine the ingredients to make a potion.",

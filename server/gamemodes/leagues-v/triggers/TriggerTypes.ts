@@ -6,6 +6,7 @@
 export const TriggerType = {
     NpcKill: "npc_kill",
     NpcKillCombatLevel: "npc_kill_combat_level",
+    NpcInteract: "npc_interact",
     ItemEquip: "item_equip",
     ItemObtain: "item_obtain",
     ItemCraft: "item_craft",
@@ -29,6 +30,17 @@ export type NpcKillCombatLevelTrigger = {
     type: typeof TriggerType.NpcKillCombatLevel;
     minCombatLevel: number;
     count: number;
+};
+
+/**
+ * Talking to / interacting with an NPC ("Talk to Hans", "Pet a Stray Dog in
+ * Varrock", "Charm Gertrude"). Emitted for every non-attack NPC option.
+ */
+export type NpcInteractTrigger = {
+    type: typeof TriggerType.NpcInteract;
+    npcIds: number[];
+    /** Optional option filter ("pet", "talk-to", ...); omitted means any option. */
+    option?: string;
 };
 
 export type ItemEquipTrigger = {
@@ -61,7 +73,17 @@ export type ItemBuryTrigger = {
 
 export type QuestCompleteTrigger = {
     type: typeof TriggerType.QuestComplete;
-    questId: number;
+    /**
+     * Stable content key of the quest that completes the task (see the
+     * QuestRegistry). The parser only produces this when the server implements
+     * the quest, so an unimplemented quest leaves its task unparsed instead of
+     * registering a trigger that can never fire.
+     */
+    questKey?: string;
+    /** Quest display name, kept for logging/diagnostics. */
+    questName?: string;
+    /** Cache quest id, used by hand-authored manual triggers. */
+    questId?: number;
 };
 
 // Tier 2 - Stateful triggers
@@ -109,6 +131,7 @@ export type CustomTrigger = {
 export type TaskTrigger =
     | NpcKillTrigger
     | NpcKillCombatLevelTrigger
+    | NpcInteractTrigger
     | ItemEquipTrigger
     | ItemObtainTrigger
     | ItemCraftTrigger

@@ -868,6 +868,14 @@ function executePickpocketAction(ctx: ScriptActionHandlerContext): ActionExecuti
                 services.inventory.addItemToInventory(player, itemId, qty);
                 effects.push({ type: "inventorySnapshot", playerId: player.id });
 
+                // Leagues thieving tasks ("Obtain X", pickpocket loot) track loot
+                // earned from the pocket rather than purchased from a shop.
+                services.system.eventBus?.emit("item:obtain", {
+                    playerId: player.id,
+                    itemId,
+                    count: qty,
+                });
+
                 // Loot tracker notification (script 7192) disabled: it relies on
                 // NXT-only engine opcodes (loottracker_lootadd 7628, stringvector 7408, etc.)
                 // that have no Java client reference to implement against.
@@ -1051,6 +1059,13 @@ export function register(registry: IScriptRegistry, _services: ScriptServices): 
 
             services.inventory.addItemToInventory(player, currencyId, totalCurrency);
             services.inventory.snapshotInventory(player);
+
+            // Leagues thieving tasks track the currency pulled out of a pouch.
+            services.system.eventBus?.emit("item:obtain", {
+                playerId: player.id,
+                itemId: currencyId,
+                count: totalCurrency,
+            });
             services.sound.sendSound(player, COIN_POUCH_OPEN_SOUND);
             const pouchText = count === 1 ? "coin pouch" : "coin pouches";
             services.messaging.sendGameMessage(

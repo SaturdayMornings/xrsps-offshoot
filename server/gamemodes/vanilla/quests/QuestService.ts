@@ -199,6 +199,14 @@ export function completeQuest(
 
     setQuestStage(player, quest, services, quest.completionValue);
 
+    // Leagues "Complete <quest>" tasks listen for this; the event carries the
+    // stable quest key so league task triggers never depend on display names.
+    services.system.eventBus?.emit("quest:complete", {
+        player,
+        questKey: quest.key,
+        questName: quest.name,
+    });
+
     const questPointTotal =
         player.varps.getVarpValue(VARP_QUEST_POINTS) + quest.rewards.questPoints;
     player.varps.setVarpValue(VARP_QUEST_POINTS, questPointTotal);

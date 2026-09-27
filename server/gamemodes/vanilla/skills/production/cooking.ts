@@ -79,6 +79,13 @@ export function executeCookAction(ctx: ScriptActionHandlerContext): ActionExecut
             itemId: recipe.cookedItemId,
             count: 1,
         });
+    } else if (producedItemId > 0) {
+        // Leagues "Burn Some Food" tasks listen for the burnt item.
+        services.system.eventBus?.emit("item:craft", {
+            playerId: player.id,
+            itemId: producedItemId,
+            count: 1,
+        });
     }
 
     const effects: ActionEffect[] = [

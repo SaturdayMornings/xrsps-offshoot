@@ -171,6 +171,13 @@ function executeMineAction(ctx: ScriptActionHandlerContext): ActionExecutionResu
 
         const oreName = describeItem(services, rock.oreItemId);
         effects.push(buildMessageEffect(player, `You manage to mine some ${oreName}.`));
+
+        // Leagues gathering tasks ("Mine some Copper Ore", "Mine 5 Tin Ore", ...).
+        services.system.eventBus?.emit("item:obtain", {
+            playerId: player.id,
+            itemId: rock.oreItemId,
+            count: 1,
+        });
         if (hasEchoPickaxePerk) {
             const capitalizedOreName = oreName.charAt(0).toUpperCase() + oreName.slice(1);
             effects.push(

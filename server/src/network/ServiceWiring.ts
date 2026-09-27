@@ -139,8 +139,22 @@ export function registerMessageHandlers(svc: ServerServices, router: MessageRout
         getNpcById: (npcId) => svc.npcManager?.getById(npcId),
         startNpcAttack: (ws, npc, tick, attackSpeed, modifierFlags) =>
             svc.players!.startNpcAttack(ws, npc, tick, attackSpeed, modifierFlags),
-        startNpcInteraction: (ws, npc, option, modifierFlags) =>
-            svc.players?.startNpcInteraction(ws, npc, option, modifierFlags),
+        startNpcInteraction: (ws, npc, option, modifierFlags) => {
+            const result = svc.players?.startNpcInteraction(ws, npc, option, modifierFlags);
+            const player = svc.players?.get(ws);
+            if (result?.ok && player && npc) {
+                // Leagues "Talk to X" / "Pet X" style tasks. Attacks are routed
+                // through startNpcAttack above, so this only sees other options.
+                svc.eventBus.emit("npc:interact", {
+                    player,
+                    npcTypeId: npc.typeId,
+                    option: String(option ?? "")
+                        .trim()
+                        .toLowerCase(),
+                });
+            }
+            return result;
+        },
         pickAttackSpeed: (player) => svc.playerCombatService!.pickAttackSpeed(player),
         hasNpcOption: (npc, option) => svc.npcManager?.hasNpcOption(npc, option) ?? false,
         resolveNpcOption: (npc, opNum) =>

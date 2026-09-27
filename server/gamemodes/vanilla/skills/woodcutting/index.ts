@@ -186,6 +186,13 @@ function executeWoodcutAction(ctx: ScriptActionHandlerContext): ActionExecutionR
 
         const logName = describeItem(services, tree.logItemId);
         effects.push(buildMessageEffect(player, `You get some ${logName}.`));
+
+        // Leagues gathering tasks ("Chop Some Logs", "Chop 100 Magic Logs", ...).
+        services.system.eventBus?.emit("item:obtain", {
+            playerId: player.id,
+            itemId: tree.logItemId,
+            count: 1,
+        });
         if (hasEchoAxePerk) {
             const capitalizedLogName = logName.charAt(0).toUpperCase() + logName.slice(1);
             effects.push(

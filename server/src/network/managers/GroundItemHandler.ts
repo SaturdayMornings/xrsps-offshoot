@@ -655,6 +655,13 @@ export class GroundItemHandler {
         // Track for collection log (sends "new item" notification only for new collection log items)
         this.svc.collectionLogService.trackCollectionLogItem(player, itemId);
 
+        // Leagues "Obtain X" tasks track items picked up from the ground.
+        this.svc.eventBus.emit("item:obtain", {
+            playerId: player.id,
+            itemId,
+            count: added,
+        });
+
         // Force ground item update for this player
         this.svc.playerGroundSerial.delete(player.id);
 

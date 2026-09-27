@@ -1,5 +1,5 @@
 import type { IScriptRegistry, ScriptServices } from "../../../src/game/scripts/types";
-import { registerQuestDefinition } from "./QuestRegistry";
+import { getQuestDefinitionByName, registerQuestDefinition } from "./QuestRegistry";
 import {
     VARP_QUEST_POINTS,
     completeAllQuests,
@@ -63,6 +63,9 @@ import { witchsHouseQuest } from "./definitions/witchsHouse";
 import { witchsPotionQuest } from "./definitions/witchsPotion";
 import type { QuestDefinition } from "./types";
 
+/** Set once every implemented quest definition has been registered. */
+let definitionsRegistered = false;
+
 const QUEST_DEFINITIONS: QuestDefinition[] = [
     blackKnightsFortressQuest,
     bigChompyBirdHuntingQuest,
@@ -123,6 +126,31 @@ const QUEST_DEFINITIONS: QuestDefinition[] = [
 ];
 
 /**
+ * Register every implemented quest definition without its interaction handlers.
+ *
+ * Idempotent, and safe to call before script bootstrap: the league task parser
+ * uses it to resolve "Complete X quest" tasks at index build time, which happens
+ * before registerQuestHandlers() runs.
+ */
+export function ensureQuestDefinitionsRegistered(): void {
+    if (definitionsRegistered) return;
+    definitionsRegistered = true;
+    for (const quest of QUEST_DEFINITIONS) {
+        registerQuestDefinition(quest);
+    }
+}
+
+/**
+ * Resolve a quest display name (as used by a league task name) to the stable
+ * content key of the quest. Returns undefined for quests this server does not
+ * implement, so those tasks stay unparsed instead of registering dead triggers.
+ */
+export function resolveImplementedQuestKey(name: string): string | undefined {
+    ensureQuestDefinitionsRegistered();
+    return getQuestDefinitionByName(name)?.key;
+}
+
+/**
  * Register all implemented quests: their interaction handlers, the shared
  * quest-completed scroll widget, and the registry consulted by the quest
  * journal for stage-specific text.
@@ -132,8 +160,8 @@ const QUEST_DEFINITIONS: QuestDefinition[] = [
  */
 export function registerQuestHandlers(registry: IScriptRegistry, services: ScriptServices): void {
     registerQuestCompletedWidgetHandlers(registry, services);
+    ensureQuestDefinitionsRegistered();
     for (const quest of QUEST_DEFINITIONS) {
-        registerQuestDefinition(quest);
         quest.register(registry, services);
     }
 

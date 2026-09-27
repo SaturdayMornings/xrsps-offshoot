@@ -33,6 +33,8 @@ import type {
 import type { PlayerState } from "../../src/game/player";
 import type { IScriptRegistry, ScriptServices } from "../../src/game/scripts/types";
 import { VanillaGamemode } from "../vanilla/index";
+import { getQuestDefinitionByKey } from "../vanilla/quests/QuestRegistry";
+import { isQuestComplete as isPlayerQuestComplete } from "../vanilla/quests/QuestService";
 import { LeagueContentProvider } from "./LeagueContentProvider";
 import { LeagueTaskManager } from "./LeagueTaskManager";
 import {
@@ -461,6 +463,12 @@ export class LeaguesVGamemode extends VanillaGamemode {
                                 SKILL_IDS.map((id) => p.skillSystem.getSkill(id).baseLevel),
                             getTotalLevel: () => p.skillSystem.skillTotal,
                             getCombatLevel: () => p.skillSystem.combatLevel,
+                            // Quest state for "Complete <quest>" tasks; quests are
+                            // varp-backed, so the definition resolves the completion value.
+                            isQuestComplete: (questKey: string) => {
+                                const quest = getQuestDefinitionByKey(questKey);
+                                return quest ? isPlayerQuestComplete(p, quest) : false;
+                            },
                         });
                     },
                     queueVarp: (playerId, varpId, value) =>
@@ -505,6 +513,28 @@ export class LeaguesVGamemode extends VanillaGamemode {
             }),
         );
 
+        // Items earned from world content ("Obtain X", "Chop X", "Catch X",
+        // pickpocket loot, ground item pickups, ...).
+        this.eventSubscriptions.push(
+            eventBus.on("item:obtain", (e) => {
+                this.taskManager?.onItemObtain(e.playerId, e.itemId, e.count);
+            }),
+        );
+
+        // Quest completions ("Complete Rune Mysteries", ...).
+        this.eventSubscriptions.push(
+            eventBus.on("quest:complete", (e) => {
+                this.taskManager?.onQuestComplete(e.player.id, e.questKey);
+            }),
+        );
+
+        // NPC interactions ("Talk to Hans", "Pet a Stray Dog in Varrock", ...).
+        this.eventSubscriptions.push(
+            eventBus.on("npc:interact", (e) => {
+                this.taskManager?.onNpcInteract(e.player.id, e.npcTypeId, e.option);
+            }),
+        );
+
         // Level milestones ("Achieve Your First Level 5", "Reach Total Level 500", ...).
         // These tasks are stateful, so the manager re-reads the player's skills.
         this.eventSubscriptions.push(
@@ -518,6 +548,7 @@ export class LeaguesVGamemode extends VanillaGamemode {
         this.eventSubscriptions.push(
             eventBus.on("player:login", (e) => {
                 this.taskManager?.recheckLevelReachTasks(e.player.id, "login");
+                this.taskManager?.recheckQuestTasks(e.player.id, "login");
             }),
         );
     }

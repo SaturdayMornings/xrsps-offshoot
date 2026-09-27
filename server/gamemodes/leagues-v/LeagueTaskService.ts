@@ -64,6 +64,8 @@ export type LeagueTaskPlayer = {
     getTotalLevel?: () => number | undefined;
     /** Current combat level, used by "Reach Combat Level N" tasks. */
     getCombatLevel?: () => number | undefined;
+    /** Whether the player has completed the quest with this stable key. */
+    isQuestComplete?: (questKey: string) => boolean;
 };
 
 export function getTaskProgress(player: LeagueTaskPlayer, taskId: number): number {

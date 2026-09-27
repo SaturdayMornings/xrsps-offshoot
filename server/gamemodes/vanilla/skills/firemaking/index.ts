@@ -156,6 +156,15 @@ function executeFiremakingAction(ctx: ScriptActionHandlerContext): ActionExecuti
 
     services.skills.addSkillXp(player, SkillId.Firemaking, logDef.xp);
 
+    // Leagues "Burn Some Normal Logs" / "Burn Some Oak Logs" tasks track the
+    // logs a fire was lit with. There is no dedicated firemaking event yet, so
+    // the craft event carries the consumed log item.
+    services.system.eventBus?.emit("item:craft", {
+        playerId: player.id,
+        itemId: logId,
+        count: 1,
+    });
+
     const fire = services.lightFire?.({
         tile,
         level: plane,

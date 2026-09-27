@@ -13,6 +13,7 @@ import {
 } from "../../../client/common/vars";
 import { logger } from "../../src/utils/logger";
 import { createInitialSkills } from "../../src/game/state/PlayerSkillSystem";
+import { resolveImplementedQuestKey } from "../vanilla/quests";
 import { LeagueTaskIndex, type ParsedChallenge, type ParsedTask } from "./LeagueTaskIndex";
 import {
     type LeagueTaskPlayer,
@@ -116,14 +117,16 @@ export class LeagueTaskManager {
     ): LeagueTaskManager {
         logger.info("[LeagueTaskManager] Building task index...");
 
-        const index = LeagueTaskIndex.build(npcTypeLoader, objTypeLoader);
+        const index = LeagueTaskIndex.build(npcTypeLoader, objTypeLoader, {
+            getQuestKeyByName: resolveImplementedQuestKey,
+        });
         const stats = index.getStats();
 
         logger.info(
             `[LeagueTaskManager] Index built: ${stats.parsed}/${stats.total} tasks parsed (${stats.coverage}), ${stats.challenges} challenges`,
         );
         logger.info(
-            `[LeagueTaskManager] Task index sizes: npcKill=${stats.indexSizes.npcKill}, itemEquip=${stats.indexSizes.itemEquip}, itemObtain=${stats.indexSizes.itemObtain}, itemCraft=${stats.indexSizes.itemCraft}, itemBury=${stats.indexSizes.itemBury}, levelReach=${stats.indexSizes.levelReach}`,
+            `[LeagueTaskManager] Task index sizes: npcKill=${stats.indexSizes.npcKill}, npcInteract=${stats.indexSizes.npcInteract}, itemEquip=${stats.indexSizes.itemEquip}, itemObtain=${stats.indexSizes.itemObtain}, itemCraft=${stats.indexSizes.itemCraft}, itemBury=${stats.indexSizes.itemBury}, levelReach=${stats.indexSizes.levelReach}, questComplete=${stats.indexSizes.questComplete}`,
         );
         if (stats.challenges > 0) {
             logger.info(
@@ -174,6 +177,27 @@ export class LeagueTaskManager {
             for (const challenge of clChallenges) {
                 this.tryCompleteChallenge(player, playerId, challenge);
             }
+        }
+    }
+
+    /**
+     * Called when a player uses a non-attack option on an NPC ("Talk to Hans",
+     * "Pet a Stray Dog in Varrock", ...).
+     */
+    onNpcInteract(playerId: number, npcId: number, option?: string): void {
+        if (!this.initialized) return;
+
+        const player = this.services.getPlayer(playerId);
+        if (!player) return;
+
+        const tasks = this.index.getTasksForNpcInteract(npcId);
+        for (const task of tasks) {
+            const trigger = task.trigger;
+            if (trigger.type !== TriggerType.NpcInteract) continue;
+            // Triggers may pin a specific option ("pet"); otherwise the task
+            // completes on any interaction with the NPC.
+            if (trigger.option && trigger.option !== option) continue;
+            this.tryCompleteTask(player, playerId, task, 1);
         }
     }
 
@@ -347,6 +371,45 @@ export class LeagueTaskManager {
 
             logger.info(
                 `[LeagueTaskManager] Level task ${task.taskId} "${task.row.name}" satisfied for player ${playerId} (${reason})`,
+            );
+            this.tryCompleteTask(player, playerId, task, 1);
+        }
+    }
+
+    /**
+     * Called when a player completes a quest.
+     */
+    onQuestComplete(playerId: number, questKey?: string): void {
+        this.recheckQuestTasks(playerId, questKey ? `quest ${questKey}` : "quest complete");
+    }
+
+    /**
+     * Re-evaluate quest-completion tasks against the player's quest varps.
+     *
+     * Called when a quest completes and on login, so quests finished before the
+     * trigger existed still register and award their league points.
+     */
+    recheckQuestTasks(playerId: number, reason: string = "recheck"): void {
+        if (!this.initialized) return;
+
+        const tasks = this.index.getQuestCompleteTasks();
+        if (tasks.length === 0) return;
+
+        const player = this.services.getPlayer(playerId);
+        if (!player) return;
+
+        const isQuestComplete = player.isQuestComplete;
+        if (!isQuestComplete) return;
+
+        for (const task of tasks) {
+            const trigger = task.trigger;
+            if (trigger.type !== TriggerType.QuestComplete) continue;
+            if (!trigger.questKey) continue;
+            if (LeagueTaskService.isTaskComplete(player, task.taskId)) continue;
+            if (!isQuestComplete(trigger.questKey)) continue;
+
+            logger.info(
+                `[LeagueTaskManager] Quest task ${task.taskId} "${task.row.name}" satisfied for player ${playerId} (${reason})`,
             );
             this.tryCompleteTask(player, playerId, task, 1);
         }
