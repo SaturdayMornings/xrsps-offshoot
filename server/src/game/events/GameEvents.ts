@@ -68,6 +68,12 @@ export interface GameEventMap {
         itemId: number;
         count: number;
     };
+    /** Emitted when a player buries bones (leagues "Bury Some Bones" tasks). */
+    "item:bury": {
+        playerId: number;
+        itemId: number;
+        count: number;
+    };
 }
 
 export type GameEventName = keyof GameEventMap;

@@ -497,6 +497,14 @@ export class LeaguesVGamemode extends VanillaGamemode {
             }),
         );
 
+        // Bone burying ("Bury Some Bones") is tracked separately from crafting:
+        // the prayer script emits the burial, not an item production.
+        this.eventSubscriptions.push(
+            eventBus.on("item:bury", (e) => {
+                this.taskManager?.onItemBury(e.playerId, e.itemId, e.count);
+            }),
+        );
+
         // Level milestones ("Achieve Your First Level 5", "Reach Total Level 500", ...).
         // These tasks are stateful, so the manager re-reads the player's skills.
         this.eventSubscriptions.push(

@@ -123,11 +123,11 @@ export class LeagueTaskManager {
             `[LeagueTaskManager] Index built: ${stats.parsed}/${stats.total} tasks parsed (${stats.coverage}), ${stats.challenges} challenges`,
         );
         logger.info(
-            `[LeagueTaskManager] Task index sizes: npcKill=${stats.indexSizes.npcKill}, itemEquip=${stats.indexSizes.itemEquip}, itemObtain=${stats.indexSizes.itemObtain}, itemCraft=${stats.indexSizes.itemCraft}, levelReach=${stats.indexSizes.levelReach}`,
+            `[LeagueTaskManager] Task index sizes: npcKill=${stats.indexSizes.npcKill}, itemEquip=${stats.indexSizes.itemEquip}, itemObtain=${stats.indexSizes.itemObtain}, itemCraft=${stats.indexSizes.itemCraft}, itemBury=${stats.indexSizes.itemBury}, levelReach=${stats.indexSizes.levelReach}`,
         );
         if (stats.challenges > 0) {
             logger.info(
-                `[LeagueTaskManager] Challenge index sizes: npcKill=${stats.challengeIndexSizes.npcKill}, itemEquip=${stats.challengeIndexSizes.itemEquip}, itemObtain=${stats.challengeIndexSizes.itemObtain}, itemCraft=${stats.challengeIndexSizes.itemCraft}`,
+                `[LeagueTaskManager] Challenge index sizes: npcKill=${stats.challengeIndexSizes.npcKill}, itemEquip=${stats.challengeIndexSizes.itemEquip}, itemObtain=${stats.challengeIndexSizes.itemObtain}, itemCraft=${stats.challengeIndexSizes.itemCraft}, itemBury=${stats.challengeIndexSizes.itemBury}`,
             );
         }
 
@@ -271,6 +271,31 @@ export class LeagueTaskManager {
         }
 
         const challenges = this.index.getChallengesForItemCraft(itemId);
+        for (const challenge of challenges) {
+            this.tryCompleteChallenge(player, playerId, challenge);
+        }
+    }
+
+    /**
+     * Called when a player buries bones ("Bury Some Bones", "Bury Some Lava
+     * Dragon Bones", ...).
+     */
+    onItemBury(playerId: number, itemId: number, count: number = 1): void {
+        if (!this.initialized) return;
+
+        const player = this.services.getPlayer(playerId);
+        if (!player) return;
+
+        const tasks = this.index.getTasksForItemBury(itemId);
+        const increment = normalizeProgressIncrement(count);
+        if (increment <= 0) {
+            return;
+        }
+        for (const task of tasks) {
+            this.tryCompleteTask(player, playerId, task, increment);
+        }
+
+        const challenges = this.index.getChallengesForItemBury(itemId);
         for (const challenge of challenges) {
             this.tryCompleteChallenge(player, playerId, challenge);
         }
@@ -433,6 +458,7 @@ export class LeagueTaskManager {
             case TriggerType.NpcKill:
             case TriggerType.ItemObtain:
             case TriggerType.ItemCraft:
+            case TriggerType.ItemBury:
                 return Math.max(1, task.trigger.count ?? 1);
             default:
                 return 1;

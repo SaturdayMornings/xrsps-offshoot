@@ -64,6 +64,12 @@ export function register(registry: IScriptRegistry, services: ScriptServices): v
                     tile: { x: player.tileX, y: player.tileY },
                     level: player.level,
                 });
+                // Leagues tasks ("Bury Some Bones") react to the burial itself.
+                svc.system.eventBus?.emit("item:bury", {
+                    playerId: pid,
+                    itemId,
+                    count: 1,
+                });
                 const name = (() => {
                     try {
                         const obj = svc.data.getObjType(itemId);

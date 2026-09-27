@@ -9,6 +9,7 @@ export const TriggerType = {
     ItemEquip: "item_equip",
     ItemObtain: "item_obtain",
     ItemCraft: "item_craft",
+    ItemBury: "item_bury",
     QuestComplete: "quest_complete",
     LevelReach: "level_reach",
     XpGain: "xp_gain",
@@ -43,6 +44,17 @@ export type ItemObtainTrigger = {
 
 export type ItemCraftTrigger = {
     type: typeof TriggerType.ItemCraft;
+    itemIds: number[];
+    count?: number;
+};
+
+/**
+ * "Bury Some Bones" style tasks. The task name names the bone(s) to bury, and
+ * the parser expands "any kind of Bones" into every bone item in the cache so
+ * the index can look the buried item up directly.
+ */
+export type ItemBuryTrigger = {
+    type: typeof TriggerType.ItemBury;
     itemIds: number[];
     count?: number;
 };
@@ -100,6 +112,7 @@ export type TaskTrigger =
     | ItemEquipTrigger
     | ItemObtainTrigger
     | ItemCraftTrigger
+    | ItemBuryTrigger
     | QuestCompleteTrigger
     | LevelReachTrigger
     | XpGainTrigger
@@ -134,4 +147,16 @@ export type ItemCraftEvent = {
     playerId: number;
 };
 
-export type TaskEvent = NpcKillEvent | ItemEquipEvent | ItemObtainEvent | ItemCraftEvent;
+export type ItemBuryEvent = {
+    type: typeof TriggerType.ItemBury;
+    itemId: number;
+    count: number;
+    playerId: number;
+};
+
+export type TaskEvent =
+    | NpcKillEvent
+    | ItemEquipEvent
+    | ItemObtainEvent
+    | ItemCraftEvent
+    | ItemBuryEvent;

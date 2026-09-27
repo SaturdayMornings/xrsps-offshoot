@@ -42,12 +42,14 @@ export class LeagueTaskIndex {
     private itemEquipToTasks = new Map<number, ParsedTask[]>();
     private itemObtainToTasks = new Map<number, ParsedTask[]>();
     private itemCraftToTasks = new Map<number, ParsedTask[]>();
+    private itemBuryToTasks = new Map<number, ParsedTask[]>();
 
     // Challenge indexes - O(1) lookup by trigger ID
     private npcIdToChallenges = new Map<number, ParsedChallenge[]>();
     private itemEquipToChallenges = new Map<number, ParsedChallenge[]>();
     private itemObtainToChallenges = new Map<number, ParsedChallenge[]>();
     private itemCraftToChallenges = new Map<number, ParsedChallenge[]>();
+    private itemBuryToChallenges = new Map<number, ParsedChallenge[]>();
 
     // Combat-level challenges - checked on every NPC kill (small list)
     private npcKillCombatLevelChallenges: ParsedChallenge[] = [];
@@ -143,6 +145,12 @@ export class LeagueTaskIndex {
                 }
                 break;
 
+            case TriggerType.ItemBury:
+                for (const itemId of trigger.itemIds) {
+                    this.addToIndex(this.itemBuryToTasks, itemId, parsed);
+                }
+                break;
+
             case TriggerType.LevelReach:
                 this.levelReachTasks.push(parsed);
                 break;
@@ -212,6 +220,12 @@ export class LeagueTaskIndex {
                 }
                 break;
 
+            case TriggerType.ItemBury:
+                for (const itemId of trigger.itemIds) {
+                    this.addToIndex(this.itemBuryToTasks, itemId, parsed);
+                }
+                break;
+
             case TriggerType.LevelReach:
                 this.levelReachTasks.push(parsed);
                 break;
@@ -274,6 +288,12 @@ export class LeagueTaskIndex {
                 }
                 break;
 
+            case TriggerType.ItemBury:
+                for (const itemId of trigger.itemIds) {
+                    this.addToChallengeIndex(this.itemBuryToChallenges, itemId, parsed);
+                }
+                break;
+
             case TriggerType.NpcKillCombatLevel:
                 this.npcKillCombatLevelChallenges.push(parsed);
                 break;
@@ -326,6 +346,13 @@ export class LeagueTaskIndex {
         return this.itemCraftToTasks.get(itemId) ?? [];
     }
 
+    /**
+     * Get tasks triggered by burying an item ("Bury Some Bones").
+     */
+    getTasksForItemBury(itemId: number): ParsedTask[] {
+        return this.itemBuryToTasks.get(itemId) ?? [];
+    }
+
     // === Challenge Lookup methods ===
 
     /**
@@ -354,6 +381,13 @@ export class LeagueTaskIndex {
      */
     getChallengesForItemCraft(itemId: number): ParsedChallenge[] {
         return this.itemCraftToChallenges.get(itemId) ?? [];
+    }
+
+    /**
+     * Get challenges triggered by burying an item.
+     */
+    getChallengesForItemBury(itemId: number): ParsedChallenge[] {
+        return this.itemBuryToChallenges.get(itemId) ?? [];
     }
 
     getChallengesForNpcKillCombatLevel(combatLevel: number): ParsedChallenge[] {
@@ -386,6 +420,7 @@ export class LeagueTaskIndex {
             itemEquip: number;
             itemObtain: number;
             itemCraft: number;
+            itemBury: number;
             levelReach: number;
         };
         challengeIndexSizes: {
@@ -393,6 +428,7 @@ export class LeagueTaskIndex {
             itemEquip: number;
             itemObtain: number;
             itemCraft: number;
+            itemBury: number;
         };
         sampleFailures: string[];
     } {
@@ -408,6 +444,7 @@ export class LeagueTaskIndex {
                 itemEquip: this.itemEquipToTasks.size,
                 itemObtain: this.itemObtainToTasks.size,
                 itemCraft: this.itemCraftToTasks.size,
+                itemBury: this.itemBuryToTasks.size,
                 levelReach: this.levelReachTasks.length,
             },
             challengeIndexSizes: {
@@ -415,6 +452,7 @@ export class LeagueTaskIndex {
                 itemEquip: this.itemEquipToChallenges.size,
                 itemObtain: this.itemObtainToChallenges.size,
                 itemCraft: this.itemCraftToChallenges.size,
+                itemBury: this.itemBuryToChallenges.size,
             },
             sampleFailures: this.parseFailures,
         };
