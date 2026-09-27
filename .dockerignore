@@ -1,0 +1,27 @@
+.git
+.github
+.cursor
+.vercel
+.dev-notes
+
+node_modules
+**/node_modules
+
+client/build
+client/coverage
+
+# Cache + collision data and game state are bind-mounted by docker-compose.yml.
+# Excluding them keeps the build context small and makes a missing volume fail
+# loudly (missing npc-spawns.json etc.) instead of silently losing saves.
+caches
+**/caches
+server/cache
+server/data
+
+logs
+*.log
+.DS_Store
+
+.env
+.env.*
+!.env.example

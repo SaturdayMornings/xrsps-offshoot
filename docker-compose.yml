@@ -1,0 +1,28 @@
+# Local game server with durable player data.
+#
+# Persistence is SQLite (`server/data/gamemodes/<gamemode>/game.sqlite`), so the
+# bind mounts below *are* the persistence story: accounts, character saves,
+# friends chat and trade escrow survive restarts, rebuilds and `docker compose down`.
+services:
+    server:
+        build: .
+        image: xrsps-server
+        restart: unless-stopped
+        ports:
+            - "43594:43594"
+        environment:
+            # Keep in sync with server/config.json. Each gamemode gets its own
+            # game.sqlite, so switching this value switches the dataset too.
+            GAMEMODE: leagues-v
+            # Optional knobs (see docs/setup.md / server/src/network/wsServer.ts):
+            # ADMIN_USERNAMES: "yourname"
+            # PLAYER_AUTOSAVE_TICKS: "400"   # 400 ticks x 600ms = 240s
+            # ALLOW_ACCOUNT_REGISTRATION: "false"
+        volumes:
+            # Durable game data: accounts + player_states + trade/friends tables.
+            # Includes the -wal / -shm sidecar files, so keep them together.
+            - ./server/data:/app/server/data
+            # OSRS cache (~195 MB): mount so it is downloaded once, not per build.
+            - ./server/caches:/app/server/caches
+            # Precomputed collision data (~269 MB) produced by `yarn setup`.
+            - ./server/cache:/app/server/cache
