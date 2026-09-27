@@ -1,4 +1,5 @@
 import { PlayerType } from "../../../client/rs/chat/PlayerType";
+import { SKILL_IDS } from "../../../client/rs/skill/skills";
 import { LEAGUE_SUMMARY_GROUP_ID } from "../../../client/common/ui/leagueSummary";
 import { decodeSideJournalTabFromStateVarp } from "../../../client/common/ui/sideJournal";
 import {
@@ -454,6 +455,12 @@ export class LeaguesVGamemode extends VanillaGamemode {
                             getChallengeProgress: (idx: number) => getChallengeProgress(p, idx),
                             setChallengeProgress: (idx: number, val: number) =>
                                 setChallengeProgress(p, idx, val),
+                            // Skill state for level-reach tasks ("Achieve Your First Level 5",
+                            // "Reach Total Level 500", "Reach Combat Level 50", ...).
+                            getSkillLevels: () =>
+                                SKILL_IDS.map((id) => p.skillSystem.getSkill(id).baseLevel),
+                            getTotalLevel: () => p.skillSystem.skillTotal,
+                            getCombatLevel: () => p.skillSystem.combatLevel,
                         });
                     },
                     queueVarp: (playerId, varpId, value) =>
@@ -487,6 +494,22 @@ export class LeaguesVGamemode extends VanillaGamemode {
         this.eventSubscriptions.push(
             eventBus.on("item:craft", (e) => {
                 this.taskManager?.onItemCraft(e.playerId, e.itemId, e.count);
+            }),
+        );
+
+        // Level milestones ("Achieve Your First Level 5", "Reach Total Level 500", ...).
+        // These tasks are stateful, so the manager re-reads the player's skills.
+        this.eventSubscriptions.push(
+            eventBus.on("skill:levelUp", (e) => {
+                this.taskManager?.onSkillLevelUp(e.player.id, e.skillId, e.newLevel);
+            }),
+        );
+
+        // Catch up on level tasks already satisfied when the player logs in, so
+        // milestones reached before this tracking existed still register.
+        this.eventSubscriptions.push(
+            eventBus.on("player:login", (e) => {
+                this.taskManager?.recheckLevelReachTasks(e.player.id, "login");
             }),
         );
     }

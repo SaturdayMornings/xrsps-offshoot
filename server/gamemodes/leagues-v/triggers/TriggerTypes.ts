@@ -52,11 +52,28 @@ export type QuestCompleteTrigger = {
     questId: number;
 };
 
-// Tier 2 - Stateful triggers (future)
+// Tier 2 - Stateful triggers
+/**
+ * How a level requirement is evaluated. Level tasks are stateful: instead of
+ * firing on a single event they are re-evaluated against the player's current
+ * skills, so a milestone reached before the trigger existed still completes.
+ */
+export type LevelReachScope =
+    | "levelUp" // any skill has been trained past its starting level
+    | "any" // any single skill reached `level`
+    | "all" // every skill reached `level` ("Reach Base Level N")
+    | "total" // total level reached `level` ("Reach Total Level N")
+    | "combat" // combat level reached `level` ("Reach Combat Level N")
+    | "skill"; // one specific skill reached `level` ("Reach Level 99 Attack")
+
 export type LevelReachTrigger = {
     type: typeof TriggerType.LevelReach;
-    skillId?: number; // undefined = any skill
+    scope: LevelReachScope;
     level: number;
+    /** Skill id when scope === "skill". */
+    skillId?: number;
+    /** Skills skipped by the "any" scope, e.g. "(not including Agility, Hitpoints and Runecraft)". */
+    excludeSkillIds?: number[];
 };
 
 export type XpGainTrigger = {

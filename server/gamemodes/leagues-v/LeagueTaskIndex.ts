@@ -52,6 +52,9 @@ export class LeagueTaskIndex {
     // Combat-level challenges - checked on every NPC kill (small list)
     private npcKillCombatLevelChallenges: ParsedChallenge[] = [];
 
+    // Level milestone tasks - re-evaluated on level-up / login (small list)
+    private levelReachTasks: ParsedTask[] = [];
+
     // Stats for debugging
     private parsedCount = 0;
     private unparsedCount = 0;
@@ -140,6 +143,10 @@ export class LeagueTaskIndex {
                 }
                 break;
 
+            case TriggerType.LevelReach:
+                this.levelReachTasks.push(parsed);
+                break;
+
             // Tier 2+ triggers - not indexed yet
             default:
                 break;
@@ -203,6 +210,10 @@ export class LeagueTaskIndex {
                 for (const itemId of trigger.itemIds) {
                     this.addToIndex(this.itemCraftToTasks, itemId, parsed);
                 }
+                break;
+
+            case TriggerType.LevelReach:
+                this.levelReachTasks.push(parsed);
                 break;
 
             default:
@@ -353,6 +364,15 @@ export class LeagueTaskIndex {
         });
     }
 
+    /**
+     * Get tasks that complete once the player's skills reach a level milestone.
+     * Level tasks are stateful, so they are evaluated as one small list on
+     * level-up and login instead of being looked up by an event id.
+     */
+    getLevelReachTasks(): readonly ParsedTask[] {
+        return this.levelReachTasks;
+    }
+
     // === Stats ===
 
     getStats(): {
@@ -366,6 +386,7 @@ export class LeagueTaskIndex {
             itemEquip: number;
             itemObtain: number;
             itemCraft: number;
+            levelReach: number;
         };
         challengeIndexSizes: {
             npcKill: number;
@@ -387,6 +408,7 @@ export class LeagueTaskIndex {
                 itemEquip: this.itemEquipToTasks.size,
                 itemObtain: this.itemObtainToTasks.size,
                 itemCraft: this.itemCraftToTasks.size,
+                levelReach: this.levelReachTasks.length,
             },
             challengeIndexSizes: {
                 npcKill: this.npcIdToChallenges.size,

@@ -12,6 +12,7 @@ import {
     VARBIT_LEAGUE_MASTERY_POINTS_TO_SPEND,
 } from "../../../client/common/vars";
 import { logger } from "../../src/utils/logger";
+import { createInitialSkills } from "../../src/game/state/PlayerSkillSystem";
 import { LeagueTaskIndex, type ParsedChallenge, type ParsedTask } from "./LeagueTaskIndex";
 import {
     type LeagueTaskPlayer,
@@ -23,7 +24,7 @@ import {
     setTaskProgress,
 } from "./LeagueTaskService";
 import { syncLeaguePackedVarps } from "./leaguePackedVarps";
-import { TriggerType } from "./triggers/TriggerTypes";
+import { TriggerType, type LevelReachTrigger } from "./triggers/TriggerTypes";
 
 export interface TaskManagerServices {
     getPlayer: (playerId: number) => LeagueTaskPlayer | undefined;
@@ -46,6 +47,51 @@ function queuePackedVarpUpdates(
 ): void {
     for (const update of updates) {
         services.queueVarp(playerId, update.id, update.value);
+    }
+}
+
+/**
+ * Base levels every player starts with, indexed by skill id.
+ * Used to tell a real level-up apart from a skill that simply starts above
+ * level 1 (Hitpoints starts at 10), so the login catch-up cannot award
+ * "Achieve Your First Level Up" to an untouched account.
+ */
+const STARTING_SKILL_LEVELS: readonly number[] = createInitialSkills().map(
+    (skill) => skill.baseLevel,
+);
+
+/**
+ * Evaluate a stateful level milestone against the player's current skills.
+ */
+function isLevelReachSatisfied(
+    trigger: LevelReachTrigger,
+    levels: readonly number[],
+    totalLevel: number,
+    combatLevel: number,
+): boolean {
+    switch (trigger.scope) {
+        case "levelUp":
+            return levels.some(
+                (level, skillId) => level > (STARTING_SKILL_LEVELS[skillId] ?? 1),
+            );
+        case "any":
+            return levels.some(
+                (level, skillId) =>
+                    level >= trigger.level &&
+                    !(trigger.excludeSkillIds?.includes(skillId) ?? false),
+            );
+        case "all":
+            return levels.length > 0 && levels.every((level) => level >= trigger.level);
+        case "total":
+            return totalLevel >= trigger.level;
+        case "combat":
+            return combatLevel >= trigger.level;
+        case "skill":
+            return (
+                trigger.skillId !== undefined && (levels[trigger.skillId] ?? 0) >= trigger.level
+            );
+        default:
+            return false;
     }
 }
 
@@ -77,7 +123,7 @@ export class LeagueTaskManager {
             `[LeagueTaskManager] Index built: ${stats.parsed}/${stats.total} tasks parsed (${stats.coverage}), ${stats.challenges} challenges`,
         );
         logger.info(
-            `[LeagueTaskManager] Task index sizes: npcKill=${stats.indexSizes.npcKill}, itemEquip=${stats.indexSizes.itemEquip}, itemObtain=${stats.indexSizes.itemObtain}, itemCraft=${stats.indexSizes.itemCraft}`,
+            `[LeagueTaskManager] Task index sizes: npcKill=${stats.indexSizes.npcKill}, itemEquip=${stats.indexSizes.itemEquip}, itemObtain=${stats.indexSizes.itemObtain}, itemCraft=${stats.indexSizes.itemCraft}, levelReach=${stats.indexSizes.levelReach}`,
         );
         if (stats.challenges > 0) {
             logger.info(
@@ -227,6 +273,57 @@ export class LeagueTaskManager {
         const challenges = this.index.getChallengesForItemCraft(itemId);
         for (const challenge of challenges) {
             this.tryCompleteChallenge(player, playerId, challenge);
+        }
+    }
+
+    /**
+     * Called when a player levels a skill.
+     *
+     * Level milestones are stateful, so rather than matching a single event we
+     * re-evaluate every level task against the player's current skills - which
+     * also covers milestones crossed before the trigger existed.
+     */
+    onSkillLevelUp(playerId: number, skillId: number, newLevel: number): void {
+        this.recheckLevelReachTasks(playerId, `skill ${skillId} reached ${newLevel}`);
+    }
+
+    /**
+     * Re-evaluate level-reach tasks against the player's current skills.
+     *
+     * Called on login and on every level-up so milestones already reached -
+     * for example levels trained before task tracking was wired up - still
+     * register and award their league points.
+     */
+    recheckLevelReachTasks(playerId: number, reason: string = "recheck"): void {
+        if (!this.initialized) return;
+
+        const tasks = this.index.getLevelReachTasks();
+        if (tasks.length === 0) return;
+
+        const player = this.services.getPlayer(playerId);
+        if (!player) return;
+
+        const levels = player.getSkillLevels?.();
+        if (!levels || levels.length === 0) return;
+
+        const totalLevel =
+            player.getTotalLevel?.() ?? levels.reduce((sum, level) => sum + level, 0);
+        const combatLevel = player.getCombatLevel?.() ?? 0;
+
+        logger.debug(
+            `[LeagueTaskManager] Checking ${tasks.length} level tasks for player ${playerId} (${reason})`,
+        );
+
+        for (const task of tasks) {
+            const trigger = task.trigger;
+            if (trigger.type !== TriggerType.LevelReach) continue;
+            if (LeagueTaskService.isTaskComplete(player, task.taskId)) continue;
+            if (!isLevelReachSatisfied(trigger, levels, totalLevel, combatLevel)) continue;
+
+            logger.info(
+                `[LeagueTaskManager] Level task ${task.taskId} "${task.row.name}" satisfied for player ${playerId} (${reason})`,
+            );
+            this.tryCompleteTask(player, playerId, task, 1);
         }
     }
 

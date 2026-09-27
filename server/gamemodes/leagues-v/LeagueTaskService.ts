@@ -58,6 +58,12 @@ export type LeagueTaskPlayer = {
     gamemodeState: Map<string, unknown>;
     getChallengeProgress?: (customIndex: number) => number;
     setChallengeProgress?: (customIndex: number, value: number) => void;
+    /** Base levels indexed by skill id, used by level-reach tasks. */
+    getSkillLevels?: () => readonly number[] | undefined;
+    /** Total level across all skills, used by "Reach Total Level N" tasks. */
+    getTotalLevel?: () => number | undefined;
+    /** Current combat level, used by "Reach Combat Level N" tasks. */
+    getCombatLevel?: () => number | undefined;
 };
 
 export function getTaskProgress(player: LeagueTaskPlayer, taskId: number): number {
