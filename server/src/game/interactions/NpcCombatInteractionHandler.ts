@@ -99,6 +99,14 @@ export class NpcCombatInteractionHandler {
             return { ok: false, message: "interaction_blocked" };
         }
 
+        // A locked (cutscene, teleport, trade, skilling animation) or stunned
+        // player cannot start an attack. Without this, the attack click would
+        // cancel the interruptible action that owns the lock and could strand
+        // the lock (freezing the player).
+        if (!me.canAttack()) {
+            return { ok: false, message: "interaction_locked" };
+        }
+
         const canStartCombat = this.canStartNpcCombat?.(me, npc, currentTick);
         if (canStartCombat && !canStartCombat.allowed) {
             return {

@@ -1,5 +1,4 @@
 import type { ActionEffect, ActionExecutionResult } from "../../../../src/game/actions/types";
-import { LockState } from "../../../../src/game/model/LockState";
 import type { PlayerState } from "../../../../src/game/player";
 import type {
     IScriptRegistry,
@@ -670,6 +669,13 @@ const PICKPOCKET_DAMAGE_SOUND_DELAY = 20;
 const COIN_POUCH_OPEN_SOUND = 2115;
 const PICKPOCKET_HIT_STYLE = 16;
 const PICKPOCKET_BUSY_VARBIT = 12393;
+/**
+ * Ticks between resolving a failed attempt (phase 1) and the stun damage
+ * (phase 3). The stun timer is started when the failure is resolved with these
+ * ticks added on top, so the total stun duration is unchanged while the stun
+ * can no longer be lost to a cancelled follow-up tick.
+ */
+const PICKPOCKET_STUN_LEAD_TICKS = 2;
 const PICKPOCKET_NOTIFY_SCRIPT = 7192;
 const GLOVES_OF_SILENCE_ID = 10075;
 const GLOVES_OF_SILENCE_BONUS = 5;
@@ -823,11 +829,17 @@ function executePickpocketAction(ctx: ScriptActionHandlerContext): ActionExecuti
 
         // The pickpocket animation plays on the attempt itself, before the
         // outcome is known, and the player is held in place until it resolves.
+        //
+        // The attempt deliberately does NOT set `player.lock`: the follow-up
+        // ticks are cancellable (any player input that interrupts interruptible
+        // actions - clicking scenery, a ground item, another NPC, a teleport -
+        // drops the remaining phases), and a lock that only a later phase
+        // releases would then stay set forever and freeze the player in place.
+        // The fail branch applies the stun timer instead, which always expires.
         if (npc) {
             services.npc.stopNpcMovement(npc, 2);
         }
         services.animation.playPlayerSeq(player, PICKPOCKET_ANIM);
-        player.lock = LockState.FULL_WITH_ITEM_INTERACTION;
         schedulePickpocket(services, player.id, { ...data, phase: 1 }, tick);
         return { ok: true, cooldownTicks: 1, effects };
     }
@@ -843,7 +855,6 @@ function executePickpocketAction(ctx: ScriptActionHandlerContext): ActionExecuti
         const success = rollPickpocketSuccess(thievingLevel, data, equipArray);
 
         if (success) {
-            player.lock = LockState.NONE;
             services.combat.clearPlayerFaceTarget(player);
             services.sound.sendSound(player, PICKPOCKET_SUCCESS_SOUND);
 
@@ -872,6 +883,13 @@ function executePickpocketAction(ctx: ScriptActionHandlerContext): ActionExecuti
         // Fail: message + NPC forced chat + set busy varbit
         effects.push(buildMessageEffect(player, `You fail to pick the ${npcNameLower}'s pocket.`));
         services.variables.sendVarbit?.(player, PICKPOCKET_BUSY_VARBIT, 1);
+
+        // Stun the player as soon as the failure is known. The stun is a timer,
+        // so it is guaranteed to expire even if the remaining cosmetic ticks
+        // (phases 2-3) are cancelled by player input. The lead ticks keep the
+        // total stun duration identical to applying the timer at the damage
+        // tick, while blocking movement from the moment the attempt fails.
+        services.combat.stunPlayer(player, data.stunTicks + PICKPOCKET_STUN_LEAD_TICKS);
 
         if (npc) {
             services.npc.stopNpcMovement(npc, 2);
@@ -939,9 +957,9 @@ function executePickpocketAction(ctx: ScriptActionHandlerContext): ActionExecuti
         });
 
         effects.push(buildMessageEffect(player, "You've been stunned!"));
-        // The stun timer takes over from the attempt lock.
-        player.lock = LockState.NONE;
-        services.combat.stunPlayer(player, data.stunTicks);
+        // The stun timer started when the failure was resolved (phase 1); this
+        // phase only lands the damage. Nothing here owns player state, so the
+        // phase can be cancelled without stranding the player.
         services.variables.sendVarbit?.(player, PICKPOCKET_BUSY_VARBIT, 0);
     }
 

@@ -19,6 +19,7 @@ import {
 } from "../../world/LocCollisionRect";
 import { loadVisibleLocTypeForPlayer } from "../../world/LocTransforms";
 import type { Actor } from "../actor";
+import { LockStateChecks } from "../model/LockState";
 import { PlayerState } from "../player";
 import type { ScriptRuntime } from "../scripts/ScriptRuntime";
 import type { PlayerRepository } from "./PlayerInteractionSystem";
@@ -131,6 +132,13 @@ export class LocInteractionHandler {
 
         // Block interactions during tutorial
         if (!me.canInteract()) {
+            return;
+        }
+
+        // A locked player (cutscene, teleport, trade, skilling animation) cannot
+        // start a new world interaction. Without this the click would cancel the
+        // interruptible action that owns the lock and could strand the lock.
+        if (!LockStateChecks.canNpcInteract(me.lock)) {
             return;
         }
 

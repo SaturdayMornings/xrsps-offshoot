@@ -508,6 +508,13 @@ export class PlayerInteractionSystem {
             return;
         }
 
+        // A locked player (cutscene, teleport, trade, skilling animation) cannot
+        // start a ground-item interaction; the click would cancel the
+        // interruptible action that owns the lock and could strand the lock.
+        if (!LockStateChecks.canGroundItemInteract(me.lock)) {
+            return;
+        }
+
         // Ground-item interactions replace active click intents.
         this.interruptSkillActions(me.id);
         this.replaceInteractionState(ws, me);
@@ -540,8 +547,11 @@ export class PlayerInteractionSystem {
         const interaction = this.interactions.get(ws);
         const me = this.players.get(ws);
 
-        // Walking cancels all queued skill actions (woodcutting, mining, etc.)
-        if (me) {
+        // Walking cancels all queued skill actions (woodcutting, mining, etc.).
+        // A player who cannot move (locked or stunned) is not actually walking,
+        // so their pending actions must survive: cancelling them could strand a
+        // lock that only the cancelled action would have released.
+        if (me && me.canMove()) {
             this.interruptSkillActions(me.id);
         }
 
