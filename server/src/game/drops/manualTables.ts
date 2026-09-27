@@ -43,6 +43,10 @@ const IMP_NPC_TYPE_IDS = [5007, 3134] as const;
 // Scorpion NPC type IDs (level 14 + variants)
 const SCORPION_NPC_TYPE_IDS = [3024, 5242, 2480, 2479] as const;
 
+// Cuffs (combat level 3). Custom drop, not OSRS parity.
+const CUFFS_NPC_TYPE_ID = 3279;
+const CUFFS_COINS_QUANTITY = 100_000_000;
+
 export const MANUAL_NPC_DROP_OVERRIDES: ManualNpcDropOverride[] = [
     // Imp drops (OSRS wiki)
     {
@@ -726,5 +730,12 @@ export const MANUAL_NPC_DROP_OVERRIDES: ManualNpcDropOverride[] = [
                 },
             ],
         },
+    },
+    // Cuffs — custom drop: 100,000,000 coins (100M) on every kill. Manual
+    // overrides replace the table, so his OSRS loot (Bones, coins, ...) is no
+    // longer rolled.
+    {
+        npcTypeIds: [CUFFS_NPC_TYPE_ID],
+        table: alwaysTable(drop("Coins", CUFFS_COINS_QUANTITY, "Always")),
     },
 ];
