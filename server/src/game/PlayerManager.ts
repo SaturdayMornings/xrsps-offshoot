@@ -38,12 +38,55 @@ export interface OrphanedPlayer {
  */
 const ORPHAN_MAX_TICKS = 100;
 
+/**
+ * Inclusive world-tile rectangle that an ambient bot is confined to.
+ * Bounding the walk is what stops a random walk from slowly drifting out of
+ * the area a bot is meant to populate.
+ */
+export type BotRoamArea = {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+};
+
+/** Per-bot ambient roaming state; only present for bots that opted in. */
+type BotRoamState = {
+    area: BotRoamArea;
+    /** Furthest a destination may sit from the bot's current tile, in tiles. */
+    maxHop: number;
+    /** Tick at which an idle bot may choose its next destination. */
+    nextDecisionTick: number;
+    /** True while the bot was walking on the previous tick; detects arrival. */
+    wasWalking: boolean;
+};
+
+// Ambient bot pacing. Ticks are 600ms, so an idle spell lands between roughly
+// 3.6s and 9.6s, which reads like a player loitering rather than a patrol.
+const BOT_ROAM_IDLE_TICKS_MIN = 6;
+const BOT_ROAM_IDLE_TICKS_MAX = 16;
+// An unusable destination retries after a short delay instead of burning the wait.
+const BOT_ROAM_RETRY_TICKS = 3;
+// Random destinations sampled per decision before deferring to the retry delay.
+const BOT_ROAM_PICK_ATTEMPTS = 8;
+// Default size of a single hop, in tiles. Kept short so bots mill about instead
+// of marching point to point across the whole area.
+const BOT_ROAM_DEFAULT_MAX_HOP = 5;
+
+function clamp(value: number, min: number, max: number): number {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+}
+
 // --- Player management / interaction delegation ---
 export class PlayerManager implements PlayerRepository {
     private players = new Map<WebSocket, PlayerState>();
     private pathService: PathService;
     // Headless players (no websocket) for testing/simulation
     private bots: PlayerState[] = [];
+    /** Ambient roaming state, keyed by bot player id. Absent = stationary bot. */
+    private botRoam = new Map<number, BotRoamState>();
     private nextPidShuffleTick = 0;
     /**
      * Orphaned players - disconnected while in combat.
@@ -196,7 +239,16 @@ export class PlayerManager implements PlayerRepository {
     }
 
     // Create a headless fake player (no websocket) at the given tile.
-    addBot(spawnX: number, spawnY: number, level: number = 0): PlayerState | undefined {
+    //
+    // `name` is applied directly: real players get theirs during the login
+    // handshake, which bots never run, so without it `PlayerState.name` stays ""
+    // and clients render the model with no name plate.
+    addBot(
+        spawnX: number,
+        spawnY: number,
+        level: number = 0,
+        name: string = "",
+    ): PlayerState | undefined {
         const id = this.allocatePlayerId();
         if (id === undefined) {
             logger.warn(
@@ -205,6 +257,9 @@ export class PlayerManager implements PlayerRepository {
             return undefined;
         }
         const p = new PlayerState(id, spawnX, spawnY, level, this.gamemode);
+        if (name.length > 0) {
+            p.name = name;
+        }
         this.attachMovementPathfinder(p);
         // Assign a default Rune equipment appearance for bots so clients can
         // render a distinct look without guessing.
@@ -224,6 +279,30 @@ export class PlayerManager implements PlayerRepository {
         this.bots.push(p);
         this.usedIds.add(id);
         return p;
+    }
+
+    /**
+     * Enables ambient wandering for a bot inside an inclusive tile rectangle.
+     *
+     * Destinations are drawn near the bot's current tile and routed through the
+     * bot's own movement pathfinder, so every step is collision-validated and
+     * there is no second walkability check to keep in sync with the collision
+     * data. The rectangle is what keeps the random walk from drifting away.
+     *
+     * Bots without this call stay exactly where they were spawned.
+     */
+    enableBotRoam(bot: PlayerState, area: BotRoamArea, opts?: { maxHop?: number }): void {
+        this.botRoam.set(bot.id, {
+            area: {
+                minX: Math.min(area.minX, area.maxX),
+                minY: Math.min(area.minY, area.maxY),
+                maxX: Math.max(area.minX, area.maxX),
+                maxY: Math.max(area.minY, area.maxY),
+            },
+            maxHop: Math.max(1, Math.trunc(opts?.maxHop ?? BOT_ROAM_DEFAULT_MAX_HOP)),
+            nextDecisionTick: 0,
+            wasWalking: false,
+        });
     }
 
     remove(ws: WebSocket): void {
@@ -684,9 +763,95 @@ export class PlayerManager implements PlayerRepository {
             p.skillSystem.tickHitpoints(currentTick);
             p.skillSystem.tickSkillRestoration(currentTick);
             p.specEnergy.tick(currentTick);
+            // Roam before the freeze interceptor so that a freshly queued path on
+            // an immobilised bot is still cleared instead of being walked this tick.
+            this.tickBotRoam(p, currentTick);
             interceptFrozenCombatMovement(p, currentTick);
             movementProcessor.processEntity(p, currentTick);
         }
+    }
+
+    /**
+     * Advances ambient wandering for one bot.
+     *
+     * The rhythm is deliberately stop-start: walk to one destination, stand for
+     * a randomised spell, then pick another. Arrival is detected by watching for
+     * a walk that ended, so the pause happens *after* the walk rather than being
+     * eaten by it (which is what makes bots look like they are marching).
+     */
+    private tickBotRoam(bot: PlayerState, currentTick: number): void {
+        const state = this.botRoam.get(bot.id);
+        if (!state) return;
+
+        if (bot.hasPath()) {
+            state.wasWalking = true;
+            return;
+        }
+        if (state.wasWalking) {
+            // A walk just finished: loiter here before choosing somewhere new.
+            state.wasWalking = false;
+            state.nextDecisionTick = currentTick + this.randomBotRoamIdleTicks();
+            return;
+        }
+        if (currentTick < state.nextDecisionTick) return;
+
+        for (let attempt = 0; attempt < BOT_ROAM_PICK_ATTEMPTS; attempt++) {
+            const dest = this.pickBotRoamDestination(bot, state);
+            if (!dest) continue;
+            // Bots always walk: nothing drives a run toggle for them, and running
+            // would drain an energy pool that never regenerates in the demo.
+            bot.running = false;
+            if (!bot.pathTo(dest.x, dest.y)) continue;
+            if (this.isBotRoamPathContained(bot, state.area)) return;
+            // The route needed to leave the area; drop it and sample again.
+            bot.clearPath();
+        }
+
+        // Every sample was walled off or unrouteable; try again shortly.
+        state.nextDecisionTick = currentTick + BOT_ROAM_RETRY_TICKS;
+    }
+
+    /**
+     * Whether a freshly queued path stays wholly inside the roam area.
+     *
+     * Bounding the destination alone is not enough. When the straight route is
+     * blocked the pathfinder detours around the obstacle, and if the requested
+     * destination is itself unreachable it falls back to the nearest tile it can
+     * reach instead — both of which can land steps outside the rectangle (the
+     * Grand Exchange's north wall is a reliable example). Bots are always inside
+     * the area when they decide, so a route that leaves it is discarded rather
+     * than walked.
+     */
+    private isBotRoamPathContained(bot: PlayerState, area: BotRoamArea): boolean {
+        for (const step of bot.getPathQueue()) {
+            if (step.x < area.minX || step.x > area.maxX) return false;
+            if (step.y < area.minY || step.y > area.maxY) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Samples a short random hop from the bot's current tile, clamped into its
+     * roam area so the bot can never be asked to leave the rectangle.
+     */
+    private pickBotRoamDestination(
+        bot: PlayerState,
+        state: BotRoamState,
+    ): { x: number; y: number } | undefined {
+        const { area, maxHop } = state;
+        const span = maxHop * 2 + 1;
+        const offsetX = Math.floor(Math.random() * span) - maxHop;
+        const offsetY = Math.floor(Math.random() * span) - maxHop;
+        const targetX = clamp(bot.tileX + offsetX, area.minX, area.maxX);
+        const targetY = clamp(bot.tileY + offsetY, area.minY, area.maxY);
+        if (targetX === bot.tileX && targetY === bot.tileY) return undefined;
+        return { x: targetX, y: targetY };
+    }
+
+    /** Randomised pause between wanders, in ticks. */
+    private randomBotRoamIdleTicks(): number {
+        const span = BOT_ROAM_IDLE_TICKS_MAX - BOT_ROAM_IDLE_TICKS_MIN + 1;
+        return BOT_ROAM_IDLE_TICKS_MIN + Math.floor(Math.random() * span);
     }
 
     startFollowing(

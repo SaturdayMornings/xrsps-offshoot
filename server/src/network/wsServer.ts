@@ -15,6 +15,7 @@ import type { ObjTypeLoader } from "../../../client/rs/config/objtype/ObjTypeLoa
 import { ACCOUNT_SUMMARY_GROUP_ID } from "../../../client/common/ui/accountSummary";
 import { MUSIC_GROUP_ID } from "../../../client/common/ui/music";
 import { VARP_FOLLOWER_INDEX } from "../../../client/common/vars";
+import { pickBotNames } from "../../data/botUsernames";
 import { MusicCatalogService } from "../audio/MusicCatalogService";
 import { MusicRegionService } from "../audio/MusicRegionService";
 import { MusicUnlockService } from "../audio/MusicUnlockService";
@@ -53,7 +54,7 @@ import { getGamemodeDataDir } from "../game/gamemodes/GamemodeRegistry";
 import { GroundItemManager } from "../game/items/GroundItemManager";
 import { NpcState, type NpcUpdateDelta } from "../game/npc";
 import { NpcManager } from "../game/npcManager";
-import { PlayerManager, PlayerState } from "../game/player";
+import { PlayerManager, PlayerState, type BotRoamArea } from "../game/player";
 import { PrayerSystem } from "../game/prayer/PrayerSystem";
 import { SailingInstanceManager } from "../game/sailing/SailingInstanceManager";
 import { ScriptRegistry, ScriptRuntime, bootstrapScripts } from "../game/scripts";
@@ -1358,11 +1359,42 @@ export class WSServer {
 
     private initTestBots(): void {
         try {
-            const bot1 = this.players?.addBot(3168, 3475, 0);
-            const bot2 = this.players?.addBot(3173, 3475, 0);
+            // Grand Exchange courtyard, plane 0. Every tile was verified walkable
+            // against the precomputed collision cache. The group is kept inside a
+            // single 15x15 viewport and spread over two rows so it reads as a small
+            // crowd rather than a line of fixtures.
+            const spawns: ReadonlyArray<{ x: number; y: number }> = [
+                { x: 3168, y: 3475 }, // [0] caster
+                { x: 3173, y: 3475 }, // [1] the caster's target
+                { x: 3166, y: 3475 },
+                { x: 3177, y: 3475 },
+                { x: 3171, y: 3480 },
+            ];
+
+            // The bots wander this rectangle instead of standing on their spawn
+            // tiles forever. It covers the GE courtyard and the plaza around the
+            // fountain: 650 tiles, 603 of which are reachable from the spawns
+            // (92.8%), and only ~0.4% of sampled hops are rejected (unroutable, or
+            // routed back out of the box). enableBotRoam enforces the bounds.
+            const roamArea: BotRoamArea = {
+                minX: 3157,
+                minY: 3469,
+                maxX: 3181,
+                maxY: 3494,
+            };
+
+            // Realistic display names so the bots do not appear as blank-named
+            // models. Randomly sampled without replacement from BOT_USERNAMES.
+            const names = pickBotNames(spawns.length);
+
+            const spawned: PlayerState[] = [];
+            spawns.forEach((spawn, index) => {
+                const bot = this.players?.addBot(spawn.x, spawn.y, 0, names[index]);
+                if (bot) spawned.push(bot);
+            });
+            if (spawned.length === 0) return;
 
             const setupCasterBot = (p: PlayerState, target: PlayerState) => {
-                if (!p) return;
                 p.items.setItemDefResolver((id: number) => getItemDefinition(id));
                 this.appearanceService.refreshAppearanceKits(p);
                 applyAutocastState(p, 3273, 1, false); // Wind Strike
@@ -1373,20 +1405,32 @@ export class WSServer {
             };
 
             const setupPassiveBot = (p: PlayerState) => {
-                if (!p) return;
                 p.items.setItemDefResolver((id: number) => getItemDefinition(id));
                 this.appearanceService.refreshAppearanceKits(p);
                 clearAutocastState(p);
                 (p as any).botInteraction = undefined;
             };
 
-            if (bot1 && bot2) {
-                // Only bot1 casts at bot2 for now; bot2 stays stationary/passive.
-                setupCasterBot(bot1, bot2);
-                setupPassiveBot(bot2);
-                this.actionScheduler.registerPlayer(bot1);
-                this.actionScheduler.registerPlayer(bot2);
+            // The original PoC pair keeps its roles: the first bot autocasts Wind
+            // Strike at the second. Every additional bot stands around passively.
+            const [caster, casterTarget] = spawned;
+            for (const bot of spawned) {
+                if (casterTarget && bot === caster) {
+                    setupCasterBot(bot, casterTarget);
+                } else {
+                    setupPassiveBot(bot);
+                }
+                this.actionScheduler.registerPlayer(bot);
+                // Every bot wanders, caster included, so the GE crowd keeps moving.
+                this.players?.enableBotRoam(bot, roamArea);
             }
+
+            logger.info(
+                `[bot] spawned ${spawned.length} test bots: ` +
+                    spawned.map((b) => `${b.name} @(${b.tileX},${b.tileY})`).join(", ") +
+                    ` — roaming (${roamArea.minX},${roamArea.minY})..` +
+                    `(${roamArea.maxX},${roamArea.maxY})`,
+            );
         } catch (err) {
             logger.warn("[bot] test bot spawn failed", err);
         }

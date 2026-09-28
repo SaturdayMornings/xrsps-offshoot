@@ -1159,4 +1159,4 @@ export class PlayerState extends Actor {
     }
 }
 
-export { PlayerManager, type OrphanedPlayer } from "./PlayerManager";
+export { PlayerManager, type BotRoamArea, type OrphanedPlayer } from "./PlayerManager";

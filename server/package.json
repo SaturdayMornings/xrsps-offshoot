@@ -26,7 +26,7 @@
     "ensure-cache": "tsx scripts/ensure-cache.ts --server",
     "find-item": "tsx scripts/find-item.ts",
     "wiki-drops": "tsx scripts/wiki-drops.ts",
-    "test": "tsx tests/authentication.test.ts && tsx tests/friends-chat.test.ts && tsx tests/npc-drop-tables.test.ts && tsx tests/league-xp-multiplier.test.ts && tsx tests/league-level-tasks.test.ts && tsx tests/league-bury-cook-tasks.test.ts && tsx tests/league-easy-tier-tasks.test.ts && tsx tests/league-mastery-challenges.test.ts"
+    "test": "tsx tests/authentication.test.ts && tsx tests/friends-chat.test.ts && tsx tests/npc-drop-tables.test.ts && tsx tests/league-xp-multiplier.test.ts && tsx tests/league-level-tasks.test.ts && tsx tests/league-bury-cook-tasks.test.ts && tsx tests/league-easy-tier-tasks.test.ts && tsx tests/league-mastery-challenges.test.ts && tsx tests/bot-roam.test.ts"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
