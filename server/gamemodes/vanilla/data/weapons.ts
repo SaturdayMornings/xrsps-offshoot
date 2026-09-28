@@ -2055,6 +2055,44 @@ export const weaponDataEntries: WeaponDataEntry[] = [
         hitDelay: 1,
         hitSounds: swordHitSounds,
     },
+    {
+        itemId: 6607,
+        name: "White longsword",
+        equipmentType: "longsword",
+        combatCategory: CombatCategory.SCIMITAR,
+        animOverrides: longswordAnimOverrides,
+        attackSequences: longswordAttackSeqs,
+        attackSpeed: 5,
+        hitDelay: 1,
+        hitSounds: swordHitSounds,
+    },
+    {
+        itemId: 6897,
+        name: "Rune longsword",
+        equipmentType: "longsword",
+        combatCategory: CombatCategory.SCIMITAR,
+        animOverrides: longswordAnimOverrides,
+        attackSequences: longswordAttackSeqs,
+        attackSpeed: 5,
+        hitDelay: 1,
+        hitSounds: swordHitSounds,
+    },
+    {
+        // Vesta's longsword (ancient warrior equipment). With no table entry the
+        // weapon resolved its category from the LONGSWORD interface but carried no
+        // attack sequence, so PlayerCombatService fell through to the unarmed swing
+        // and the player punched with it. It is a plain longsword: same swing table,
+        // stance and 5-tick speed as the metal longswords above.
+        itemId: 22613,
+        name: "Vesta's longsword",
+        equipmentType: "longsword",
+        combatCategory: CombatCategory.SCIMITAR,
+        animOverrides: longswordAnimOverrides,
+        attackSequences: longswordAttackSeqs,
+        attackSpeed: 5,
+        hitDelay: 1,
+        hitSounds: swordHitSounds,
+    },
 
     // ==================================================================================
     // SCIMITARS (Combat Category 9)
