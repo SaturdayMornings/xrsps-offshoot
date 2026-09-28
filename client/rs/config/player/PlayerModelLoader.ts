@@ -10,6 +10,7 @@ import {
     HeadCoverage,
     deriveEquipSlotFromParams,
     getHeadCoverage,
+    itemCoversArms,
 } from "./Equipment";
 import { Gender, PlayerAppearance } from "./PlayerAppearance";
 import {
@@ -199,6 +200,13 @@ export class PlayerModelLoader {
                     kits[1] = -1;
                 }
             }
+
+            // Torso/arms suppression for the body slot. Runs here (before the
+            // default-kit fallback below) so a sleeveless top's arms are recognised
+            // as "not covered by equipment" and get filled from the default kits.
+            if (metaSlot === EquipmentSlot.BODY) {
+                this.suppressBodyKits(kits, obj, hiddenParts);
+            }
         }
 
         const fallbackKits = this.getDefaultKitsForGender(workingAppearance.gender);
@@ -236,9 +244,7 @@ export class PlayerModelLoader {
 
                 // Torso/arms suppression for body
                 if (metaSlot === EquipmentSlot.BODY) {
-                    if (kits.length < 7) kits.length = 7;
-                    kits[2] = -1; // torso
-                    kits[3] = -1; // arms
+                    this.suppressBodyKits(kits, obj);
                 }
                 // Head + jaw suppression
                 // Legs suppression
@@ -264,6 +270,32 @@ export class PlayerModelLoader {
         return this.buildStaticModel(workingAppearance, extras);
     }
 
+    /**
+     * Apply the body-slot kit suppression rule to a working kit array.
+     *
+     * A worn top always replaces the base torso kit (body part 2). It only
+     * replaces the base arms kit (body part 3) when it declares that it also
+     * occupies the arms slot — i.e. when it ships sleeves in its own worn model
+     * (platebodies, robes). Sleeveless tops such as the d'hide bodies,
+     * chainbodies and leather bodies carry no arm geometry at all, so dropping
+     * the arms kit there leaves the model without arms.
+     *
+     * `hiddenParts`, when supplied, records the dropped parts so the default-kit
+     * fallback does not immediately restore them.
+     */
+    private suppressBodyKits(
+        kits: number[],
+        obj: ObjType | undefined,
+        hiddenParts?: Set<number>,
+    ): void {
+        if (kits.length < 7) kits.length = 7;
+        kits[2] = -1; // torso
+        if (itemCoversArms(obj)) {
+            kits[3] = -1; // arms
+            hiddenParts?.add(3);
+        }
+    }
+
     private partCoveredByEquipment(
         part: number,
         equippedSlots: Set<EquipmentSlot>,
@@ -276,8 +308,11 @@ export class PlayerModelLoader {
             case 1:
                 return hiddenParts?.has(1) ?? false;
             case 2:
-            case 3:
                 return equippedSlots.has(EquipmentSlot.BODY);
+            case 3:
+                // Only tops with sleeves of their own cover the arms; a sleeveless
+                // top must still fall back to the default arms kit.
+                return hiddenParts?.has(3) ?? false;
             case 4:
                 return equippedSlots.has(EquipmentSlot.GLOVES);
             case 5:

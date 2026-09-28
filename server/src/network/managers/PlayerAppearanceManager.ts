@@ -11,6 +11,7 @@ import {
     HeadCoverage,
     deriveEquipSlotFromParams,
     getHeadCoverage,
+    itemCoversArms,
 } from "../../../../client/rs/config/player/Equipment";
 import type { ServerServices } from "../../game/ServerServices";
 import { DEFAULT_EQUIP_SLOT_COUNT } from "../../game/equipment";
@@ -207,7 +208,14 @@ export class PlayerAppearanceManager {
                 }
                 case EquipmentSlot.BODY:
                     kits[2] = -1;
-                    kits[3] = -1;
+                    // Sleeveless tops (black d'hide body, chainbodies, leather bodies...)
+                    // ship no arm geometry of their own, so the identity-kit arms stay
+                    // and remain the only arm geometry on the model. Only tops that also
+                    // occupy the arms slot (OSRS wearPos2 == 6: platebodies, robes) bring
+                    // sleeves and therefore replace the base arms kit.
+                    if (itemCoversArms(obj)) {
+                        kits[3] = -1;
+                    }
                     break;
                 case EquipmentSlot.LEGS:
                     kits[5] = -1;

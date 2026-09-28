@@ -134,6 +134,36 @@ export function deriveAdditionalEquipSlotsFromParams(obj: ObjType | undefined): 
     return slots;
 }
 
+/**
+ * OSRS id of the (vestigial) "arms" equipment slot.
+ *
+ * An item's `wearPos2`/`wearPos3` list the *additional* slots it occupies, e.g.
+ * the magic shortbow is `wearPos=3` (weapon) + `wearPos2=5` (shield, two-handed).
+ * Tops whose worn model carries sleeves also claim this slot, which is why it is
+ * the one bit of item metadata that says "this body covers the arms".
+ */
+export const OSRS_ARMS_EQUIP_SLOT_ID = 6;
+
+/**
+ * Whether a worn body item provides its own arm/sleeve geometry.
+ *
+ * Platebodies and robes declare `wearPos2 = 6` and ship a second worn model that
+ * is the sleeves (e.g. rune platebody `maleModel=306` torso + `maleModel1=164`
+ * arms), so their wearer has no need for the bare identity-kit arms.
+ *
+ * Sleeveless tops (black/blue/red/green d'hide bodies, chainbodies, leather and
+ * hardleather bodies, studded bodies, aprons, pirate shirts...) leave `wearPos2`
+ * unset and their whole worn model is a copy of the torso trunk: the identity-kit
+ * arms (body part 3) are the only arm geometry they have. Suppressing that kit
+ * leaves the player model armless, so this returns false for them.
+ */
+export function itemCoversArms(obj: ObjType | undefined): boolean {
+    if (!obj) return false;
+    const secondSlot = (obj.wearPos2 ?? -1) | 0;
+    const thirdSlot = (obj.wearPos3 ?? -1) | 0;
+    return secondSlot === OSRS_ARMS_EQUIP_SLOT_ID || thirdSlot === OSRS_ARMS_EQUIP_SLOT_ID;
+}
+
 // Heuristic keyword lists to determine whether a head-slot item should suppress
 // the base head/jaw identity kits (complete helmets, masks, etc.).
 const HEAD_HIDE_KEYWORDS = [
