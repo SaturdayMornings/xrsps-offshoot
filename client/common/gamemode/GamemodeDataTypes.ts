@@ -65,3 +65,13 @@ export const VARBIT_MASTERY_POINTS_TO_SPEND = 11583;
 export const VARBIT_MASTERY_POINTS_EARNED = 11584;
 // Point unlock varbits (11585-11594) track which perks are unlocked
 export const VARBIT_MASTERY_POINT_UNLOCK_BASE = 11585;
+/**
+ * Number of point unlock varbits (11585-11594).
+ *
+ * The mastery interface lists enum 5695 (custom challenges are prepended, so
+ * entry N renders at position N + 1) and checks completion with varbit
+ * `VARBIT_MASTERY_POINT_UNLOCK_BASE + position - 1` (client script 7656, which
+ * only switches on the first 10 positions). A challenge listed past position 10
+ * still renders, but can never be shown as complete.
+ */
+export const MASTERY_POINT_UNLOCK_VARBIT_COUNT = 10;

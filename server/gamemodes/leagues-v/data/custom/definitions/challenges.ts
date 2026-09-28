@@ -13,11 +13,17 @@ import type { CustomChallenge } from "../CustomContentTypes";
 
 /**
  * All custom mastery challenges.
- * These are PREPENDED to the mastery challenges enum (5695).
  *
- * IMPORTANT: The CS2 script only handles enum positions 1-10.
- * Custom challenges occupy positions 1..N, pushing cache challenges down.
- * If you add more than 10 total challenges, some won't be trackable.
+ * These are PREPENDED to the mastery challenges enum (5695), so the challenge
+ * with customIndex N renders at enum position N + 1 and cache challenges follow
+ * it (minus the ones replaced below). The enum is 1-based while the league task
+ * enum (5728) is 0-based, which the client's enum override derives from the
+ * cache enum itself.
+ *
+ * IMPORTANT: the cache's completion script only handles enum positions 1-10
+ * (the 10 mastery point unlock varbits 11585-11594). Anything pushed past
+ * position 10 still renders in the list but can never be shown as complete, so
+ * keep the number of custom challenges below 10.
  */
 export const CUSTOM_CHALLENGES: CustomChallenge[] = [
     {

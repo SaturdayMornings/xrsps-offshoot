@@ -550,16 +550,19 @@ export class LeagueTaskManager {
      * Attempt to complete a challenge for a player.
      * Sets the corresponding varbit to mark the challenge as complete.
      *
-     * Challenge completion is tracked via varbits 11585-11594 (VARBIT_MASTERY_POINT_UNLOCK_1-10).
-     * The CS2 script checks these varbits based on the challenge's position in enum 5695.
+     * Challenge completion is tracked via varbits 11585-11594
+     * (VARBIT_MASTERY_POINT_UNLOCK_1-10). The client resolves the challenge's
+     * varbit from its position in enum 5695: entry at position P is complete when
+     * varbit `VARBIT_MASTERY_POINT_UNLOCK_BASE + P - 1` is set (script 7656).
      *
-     * Custom challenges are PREPENDED to the enum, so their positions are:
-     * - Challenge 0 → position 1 → varbit 11585
-     * - Challenge 1 → position 2 → varbit 11586
-     * etc.
+     * Custom challenges are PREPENDED to that enum (see CustomLeagueRegistry), so
+     * the challenge with customIndex N sits at position N + 1 and therefore owns
+     * varbit `VARBIT_MASTERY_POINT_UNLOCK_BASE + N`. Position 5695 is 1-based,
+     * which is why no +1 shows up here.
      *
-     * The CS2 switch only handles positions 1-10, so max 10 custom challenges can be tracked.
-     * Cache challenges are shifted down and may become untrackable (position > 10).
+     * Script 7656 only switches on positions 1-10, so a challenge past position 10
+     * (customIndex >= 10, or a cache challenge pushed there by custom entries) is
+     * still listed but can never light up; the registry warns about that at load.
      */
     private tryCompleteChallenge(
         player: LeagueTaskPlayer,
@@ -569,9 +572,7 @@ export class LeagueTaskManager {
         const challenge = parsed.challenge;
         const trigger = parsed.trigger;
 
-        // Calculate the varbit ID for this challenge
-        // Custom challenges are prepended to enum 5695, so position = customIndex + 1.
-        // Varbit = VARBIT_MASTERY_POINT_UNLOCK_BASE + customIndex = 11585 + customIndex
+        // Custom challenge N renders at enum position N + 1 -> varbit 11585 + N.
         const varbitId = VARBIT_MASTERY_POINT_UNLOCK_BASE + challenge.customIndex;
 
         // Check if already marked complete (varbit == 1 means done)

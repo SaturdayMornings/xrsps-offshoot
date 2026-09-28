@@ -312,27 +312,95 @@ export function getCustomStructParam(
     return undefined;
 }
 
-export function getCustomEnumCountOverride(enumId: number): number {
-    const entries = customEnumOverrides?.get(enumId);
-    if (!entries || entries.length === 0) return 0;
-    // Replacement challenges take the place of cache entries, so they don't
-    // increase the total count. Only genuinely new entries add to the count.
-    const newEntries = entries.filter((e: any) => e.replacesStructId === undefined).length;
-    return newEntries;
+// ---------------------------------------------------------------------------
+// Enum overrides for custom league content (tasks + mastery challenges)
+// ---------------------------------------------------------------------------
+//
+// The cache interfaces render league content by walking an enum:
+//   - the task list draws enum 5728 (keys 0..1588),
+//   - the combat mastery list draws enum 5695 (keys 1..10, 1-based!).
+// Custom content is PREPENDED to those enums, so every cache key shifts down by
+// the number of custom entries and cache entries a custom challenge replaces
+// (`replacesStructId`) drop out of the list. The key base therefore has to come
+// from the enum itself (its first key) instead of being assumed to be 0,
+// otherwise the first custom entry lands on a key the interface never visits
+// and silently disappears from the list.
+
+export type EnumKeyResolution =
+    /** No custom content for this enum: resolve the key against the cache. */
+    | { kind: "cache" }
+    /** The key maps onto this struct id. */
+    | { kind: "structId"; structId: number }
+    /** Custom content exists, but the key is past the end of the list. */
+    | { kind: "default" };
+
+/** Custom entries registered for an enum, in the order they are prepended. */
+export function getCustomEnumEntries(enumId: number): readonly any[] {
+    return customEnumOverrides?.get(enumId) ?? [];
 }
 
-export function getCustomEnumValueOverride(
+/**
+ * Number of entries an enum has once custom content is applied.
+ *
+ * Custom entries are added to the list; cache entries replaced by a custom
+ * challenge are removed from it (the challenge takes their place).
+ *
+ * @param baseCount   cache entry count of the enum
+ * @param cacheValues cache values of the enum (used to count replaced entries)
+ */
+export function getCustomEnumOutputCount(
+    enumId: number,
+    baseCount: number,
+    cacheValues?: readonly number[],
+): number {
+    const entries = getCustomEnumEntries(enumId);
+    if (entries.length === 0) return baseCount;
+
+    let removed = 0;
+    if (cacheValues && replacedCacheStructIds.size > 0) {
+        for (const value of cacheValues) {
+            if (replacedCacheStructIds.has(value | 0)) removed++;
+        }
+    }
+    return baseCount - removed + entries.length;
+}
+
+/**
+ * Resolve an enum key for an enum custom content was prepended to.
+ *
+ * @param enumKeys   cache keys of the enum, used for the key base (first key)
+ * @param enumValues cache values of the enum, used to skip replaced entries
+ */
+export function resolveEnumKeyOverride(
     enumId: number,
     key: number,
-    baseCount: number,
-): { custom: number } | { shiftedKey: number } | undefined {
-    const customCount = customEnumOverrides?.get(enumId)?.length ?? 0;
-    if (customCount === 0) return undefined;
-    const tasks = customEnumOverrides!.get(enumId)!;
-    if (key < customCount) {
-        return { custom: tasks[key].structId };
+    enumKeys?: readonly number[],
+    enumValues?: readonly number[],
+): EnumKeyResolution {
+    const entries = getCustomEnumEntries(enumId);
+    if (entries.length === 0) return { kind: "cache" };
+
+    const keyBase = enumKeys && enumKeys.length > 0 ? enumKeys[0] | 0 : 0;
+    const position = (key | 0) - keyBase;
+    if (position < 0) return { kind: "cache" };
+    if (position < entries.length) {
+        return { kind: "structId", structId: entries[position].structId | 0 };
     }
-    return { shiftedKey: key - customCount };
+
+    // Past the custom entries: take the Nth cache entry that no custom entry
+    // replaced. The index counts entries that are still listed (replaced ones
+    // are gone), not raw cache keys.
+    const cacheIndex = position - entries.length;
+    if (!enumKeys || !enumValues) return { kind: "default" };
+
+    let seen = 0;
+    for (let i = 0; i < enumKeys.length && i < enumValues.length; i++) {
+        const value = enumValues[i] | 0;
+        if (replacedCacheStructIds.has(value)) continue;
+        if (seen === cacheIndex) return { kind: "structId", structId: value };
+        seen++;
+    }
+    return { kind: "default" };
 }
 
 export function getReplacedChallengeStructIds(): ReadonlySet<number> {

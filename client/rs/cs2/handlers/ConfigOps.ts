@@ -7,12 +7,11 @@ import {
     getCollectionLogStructParamOverride,
 } from "../../../common/collectionlog/custom";
 import {
-    getCustomEnumCountOverride,
-    getCustomEnumValueOverride,
+    getCustomEnumOutputCount,
     getCustomStructParam,
     getLeagueTaskStructParam,
     getRelicOrMasteryStructParam,
-    getReplacedChallengeStructIds,
+    resolveEnumKeyOverride,
 } from "../../../common/gamemode/GamemodeContentStore";
 import { Opcodes } from "../Opcodes";
 import type { HandlerMap } from "./HandlerTypes";
@@ -332,7 +331,7 @@ export function registerConfigOps(handlers: HandlerMap): void {
     // === EnumType ===
     // enum(outputType, inputType, enumId, key) - pops 4 values
     handlers.set(Opcodes.ENUM, (ctx) => {
-        let key = ctx.intStack[--ctx.intStackSize];
+        const key = ctx.intStack[--ctx.intStackSize];
         const enumId = ctx.intStack[--ctx.intStackSize];
         const inputType = ctx.intStack[--ctx.intStackSize]; // type code (not used, but must pop)
         const outputType = ctx.intStack[--ctx.intStackSize]; // type code (not used, but must pop)
@@ -345,38 +344,24 @@ export function registerConfigOps(handlers: HandlerMap): void {
         }
 
         const enumType = ctx.enumTypeLoader?.load(enumId);
-        const baseCount = enumType?.outputCount ?? 0;
 
-        // Check for custom content enum override
-        // - Tasks are prepended (inserted at beginning)
-        // - Challenges are prepended (inserted at beginning)
-        const customOverride = getCustomEnumValueOverride(enumId, key, baseCount);
-
-        if (customOverride) {
-            if ("custom" in customOverride) {
-                ctx.pushInt(customOverride.custom);
-                return;
-            }
-            // Shift the key to account for inserted custom content
-            key = customOverride.shiftedKey;
+        // Custom league content (tasks, mastery challenges) is prepended to the
+        // cache enum. Cache entries a custom challenge replaces are dropped from
+        // the list, so the shifted keys count the remaining entries.
+        const resolution = resolveEnumKeyOverride(enumId, key, enumType?.keys, enumType?.intValues);
+        if (resolution.kind === "structId") {
+            ctx.pushInt(resolution.structId);
+            return;
         }
-
-        // Skip cache entries replaced by custom challenges.
-        // When iterating, the Nth non-replaced cache entry maps to a higher
-        // original cache key because replaced entries are removed from the sequence.
-        const replaced = getReplacedChallengeStructIds();
-        if (replaced.size > 0 && enumType?.intValues && customOverride) {
-            let target = key; // 0-based position among non-replaced entries
-            let cacheIdx = 0;
-            for (let i = 0; i < (enumType.keys?.length ?? 0); i++) {
-                const structId = enumType.intValues[i];
-                if (replaced.has(structId)) continue;
-                if (cacheIdx === target) {
-                    key = enumType.keys![i];
-                    break;
-                }
-                cacheIdx++;
+        if (resolution.kind === "default") {
+            // Past the end of the list: hand out the enum's default like the
+            // cache lookup below would.
+            if (enumType?.outputType === "s") {
+                ctx.pushString(enumType.defaultString ?? "null");
+            } else {
+                ctx.pushInt(enumType?.defaultInt ?? -1);
             }
+            return;
         }
 
         if (enumType?.outputType === "s") {
@@ -431,9 +416,9 @@ export function registerConfigOps(handlers: HandlerMap): void {
 
         const enumType = ctx.enumTypeLoader?.load(enumId);
         const baseCount = enumType?.outputCount ?? 0;
-        // Add custom content count from centralized registry
-        const customCount = getCustomEnumCountOverride(enumId);
-        ctx.pushInt(baseCount + customCount);
+        // Custom league content (tasks, mastery challenges) is prepended to the
+        // enum, and cache entries replaced by a custom challenge leave it.
+        ctx.pushInt(getCustomEnumOutputCount(enumId, baseCount, enumType?.intValues));
     });
 
     // === Map Element Category ===

@@ -160,6 +160,15 @@ export type RegisteredCustomChallenge = CustomChallenge & {
     structId: number;
     /** Auto-assigned custom challenge index (0, 1, 2...) */
     customIndex: number;
+    /**
+     * Struct params (CHALLENGE_PARAM_IDS -> value) resolved by the client's
+     * STRUCT_PARAM handler.
+     *
+     * The mastery interface draws each challenge from struct param 2028 (the
+     * description text) and the 90100+ struct range has no cache struct to read
+     * it from, so the payload has to carry it or the row renders blank.
+     */
+    params?: Record<number, number | string>;
 };
 
 // =============================================================================

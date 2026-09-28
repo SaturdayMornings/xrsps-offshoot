@@ -12,11 +12,13 @@
  * - Custom tasks are auto-indexed at module load
  * - ConfigOps.ts calls these instead of scattered helper functions
  */
+import { MASTERY_POINT_UNLOCK_VARBIT_COUNT } from "../../../../../client/common/gamemode/GamemodeDataTypes";
 import {
     CHALLENGE_PARAM_IDS,
     CUSTOM_STRUCT_RANGES,
     CUSTOM_TASK_RANGE,
     ENUM_IDS,
+    type CustomChallenge,
     type CustomTask,
     type RegisteredCustomChallenge,
     type RegisteredCustomTask,
@@ -47,7 +49,7 @@ const registeredChallenges: RegisteredCustomChallenge[] = [];
 /** Lookup by structId for struct_param overrides */
 const challengesByStructId = new Map<number, RegisteredCustomChallenge>();
 
-/** Challenges grouped by enum ID for enum overrides (APPENDED to enum) */
+/** Challenges grouped by enum ID for enum overrides (PREPENDED to enum) */
 const challengesByEnumId = new Map<number, RegisteredCustomChallenge[]>();
 
 /** Cache struct IDs replaced by custom challenges (to avoid enum duplicates) */
@@ -119,7 +121,21 @@ const SYNTHETIC_TASK_ID_BASE = 1856;
             ...challenge,
             structId: nextChallengeStructId,
             customIndex: challengeIndex,
+            // The mastery interface reads the row text from struct param 2028 and
+            // custom structs have no cache struct, so ship it with the payload.
+            params: buildChallengeStructParams(challenge),
         };
+
+        // Custom challenges are prepended to enum 5695, so the challenge with
+        // customIndex N renders at position N + 1 and is tracked by varbit
+        // VARBIT_MASTERY_POINT_UNLOCK_BASE + N. The client's completion check
+        // (script 7656) only switches on positions 1..10, so anything past that
+        // is listed but can never light up as complete.
+        if (challengeIndex >= MASTERY_POINT_UNLOCK_VARBIT_COUNT) {
+            console.warn(
+                `[CustomLeagueRegistry] Custom challenge "${challenge.description}" renders at mastery position ${challengeIndex + 1}, past the ${MASTERY_POINT_UNLOCK_VARBIT_COUNT} unlock varbits the client checks: it will be listed but never shown as complete.`,
+            );
+        }
 
         registeredChallenges.push(registered);
         challengesByStructId.set(registered.structId, registered);
@@ -203,6 +219,22 @@ function getTaskStructParam(
     return task.params?.[paramId | 0];
 }
 
+/**
+ * Build the struct params for a custom challenge.
+ *
+ * This mirrors the cache challenge structs (1177-1186), which only define param
+ * 2028 (the description text). Everything else keeps falling back to the param
+ * defaults the client uses for cache challenges, so custom and cache rows render
+ * identically (in particular param 2029, the unlock threshold script 7656 reads).
+ */
+function buildChallengeStructParams(
+    challenge: CustomChallenge,
+): Record<number, number | string> {
+    return {
+        [CHALLENGE_PARAM_IDS.DESCRIPTION]: challenge.description,
+    };
+}
+
 function getChallengeStructParam(
     challenge: RegisteredCustomChallenge,
     paramId: number,
@@ -250,13 +282,13 @@ export function getEnumCountOverride(enumId: number): number {
 /**
  * Get enum value override for custom content.
  * - Custom tasks are PREPENDED to the enum (inserted at the beginning)
- * - Custom challenges are APPENDED to the enum (added at the end)
+ * - Custom challenges are PREPENDED to the enum as well
  *
  * Called by ConfigOps.ts ENUM handler.
  *
  * @param enumId The enum ID being queried
  * @param key The key being looked up
- * @param baseCount The original enum count (needed for appended content)
+ * @param baseCount The original enum count (unused, kept for call compatibility)
  * @returns Override result, or undefined if no override needed
  */
 export function getEnumValueOverride(
