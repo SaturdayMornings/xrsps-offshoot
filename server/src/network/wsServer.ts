@@ -33,6 +33,7 @@ import {
     SpellActionHandler,
     WidgetDialogHandler,
 } from "../game/actions";
+import { pickBotOutfit } from "../game/botOutfits";
 import { loadCollectionLogItems } from "../game/collectionlog";
 import {
     HITMARK_DAMAGE,
@@ -1389,7 +1390,17 @@ export class WSServer {
 
             const spawned: PlayerState[] = [];
             spawns.forEach((spawn, index) => {
-                const bot = this.players?.addBot(spawn.x, spawn.y, 0, names[index]);
+                // Looks alternate around the plaza (see BOT_OUTFIT_ROTATION):
+                // black mystic mages holding a lava battlestaff, black d'hide
+                // rangers with a magic shortbow. The rotation starts with the
+                // mage so the battlestaff belongs to the bot that autocasts.
+                const bot = this.players?.addBot(
+                    spawn.x,
+                    spawn.y,
+                    0,
+                    names[index],
+                    pickBotOutfit(index),
+                );
                 if (bot) spawned.push(bot);
             });
             if (spawned.length === 0) return;

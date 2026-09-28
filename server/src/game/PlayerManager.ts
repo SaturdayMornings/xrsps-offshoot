@@ -5,6 +5,7 @@ import { PathService } from "../pathfinding/PathService";
 import { logger } from "../utils/logger";
 import { DoorStateManager } from "../world/DoorStateManager";
 import { DEBUG_PLAYER_IDS, Tile } from "./actor";
+import { BOT_OUTFIT_RUNE_MELEE, buildBotEquip, type BotOutfit } from "./botOutfits";
 import { interceptFrozenCombatMovement } from "./combat/engine/CombatMovementInterceptor";
 import type { GamemodeDefinition } from "./gamemodes/GamemodeDefinition";
 import { PlayerInteractionSystem, PlayerRepository } from "./interactions/PlayerInteractionSystem";
@@ -243,11 +244,16 @@ export class PlayerManager implements PlayerRepository {
     // `name` is applied directly: real players get theirs during the login
     // handshake, which bots never run, so without it `PlayerState.name` stays ""
     // and clients render the model with no name plate.
+    //
+    // `outfit` is cosmetic only: bots never equip anything through the inventory, so
+    // this appearance array is their entire look. Defaults to the rune melee set;
+    // pass one of the looks in ./botOutfits to dress a bot differently.
     addBot(
         spawnX: number,
         spawnY: number,
         level: number = 0,
         name: string = "",
+        outfit: BotOutfit = BOT_OUTFIT_RUNE_MELEE,
     ): PlayerState | undefined {
         const id = this.allocatePlayerId();
         if (id === undefined) {
@@ -261,20 +267,10 @@ export class PlayerManager implements PlayerRepository {
             p.name = name;
         }
         this.attachMovementPathfinder(p);
-        // Assign a default Rune equipment appearance for bots so clients can
-        // render a distinct look without guessing.
-        // OSRS classic item ids used here; clients can ignore unknown slots.
-        const botEquip = new Array<number>(14).fill(-1);
-        botEquip[0] = 1163; // HEAD: rune full helm
-        botEquip[3] = 1333; // WEAPON: rune scimitar
-        botEquip[4] = 1127; // BODY: rune platebody
-        botEquip[5] = 1201; // SHIELD: rune kiteshield
-        botEquip[6] = 1079; // LEGS: rune platelegs
-        botEquip[8] = 4131; // BOOTS: rune boots
         p.appearance = {
             gender: 0,
             headIcons: { prayer: -1 },
-            equip: botEquip,
+            equip: buildBotEquip(outfit),
         };
         this.bots.push(p);
         this.usedIds.add(id);
